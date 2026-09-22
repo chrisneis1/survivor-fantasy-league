@@ -1,7 +1,6 @@
 "use server";
 // Commissioner and member actions. Each one re-checks authorization on the server, validates with the domain
 // rules, and writes through the versioned store together with its audit rows.
-import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn } from "@/domain/picks";
@@ -349,7 +348,7 @@ export async function saveSeedAction(_: ActionState, fd: FormData) {
     if (pos.some((x) => !Number.isInteger(x.p) || x.p < 1 || x.p > pos.length) || seen.size !== pos.length) throw new Error(`Give each team a different position from 1 to ${pos.length}.`);
     const before = s.config.openingSeed;
     s.config.openingSeed = pos.sort((a, b) => a.p - b.p).map((x) => x.id);
-    s.config.openingSeedMethod = str(fd, "method") === "RANDOM_DRAW" ? "RANDOM_DRAW" : "MANUAL_LIST";
+    s.config.openingSeedMethod = "MANUAL_LIST";
     return { season: s, audit: [change(s, ctx.actor, "season", s.id, "SET_OPENING_SEED", before, s.config.openingSeed)], message: "Opening order saved." };
   });
 }
@@ -756,27 +755,6 @@ export async function deleteTemplateAction(_: ActionState, fd: FormData): Promis
   await store().deleteTemplate(str(fd, "template"));
   revalidatePath("/", "layout");
   return { ok: "Template deleted." };
-}
-
-/**
- * The random draw for the opening order. The site shuffles the teams itself (unbiased, from the system's secure random
- * source) and records the result, so the order is reproducible from the audit log instead of typed in by hand. The draft then
- * runs one pick at a time and reverses the order each round.
- */
-export async function drawOrderAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
-    needSetup(s);
-    if (s.teams.length < 2) throw new Error("Add at least two teams first.");
-    const order = s.teams.map((t) => t.id);
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = randomInt(i + 1);
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    const before = s.config.openingSeed;
-    s.config.openingSeed = order;
-    s.config.openingSeedMethod = "RANDOM_DRAW";
-    return { season: s, audit: [change(s, ctx.actor, "season", s.id, "DRAW_OPENING_ORDER", before, order)], message: "Order drawn: " + order.map((id) => s.teams.find((t) => t.id === id)!.member).join(", ") + "." };
-  });
 }
 
 export type { Access };

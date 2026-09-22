@@ -38,7 +38,7 @@ export async function SeasonShell({ season, active, children }: { season: Season
             </span>
           </Link>
           <span className="flex items-center gap-4 text-sm font-medium text-muted">
-            {admin ? <Link href={`/admin/${season.id}`} className="text-accent hover:underline">Commissioner</Link> : null}
+            {admin ? <Link href={`/admin/${season.id}`} className="text-accent hover:underline">Commissioner tools</Link> : null}
             <Link href="/seasons" className="hover:text-ink">Archive</Link>
           </span>
         </div>

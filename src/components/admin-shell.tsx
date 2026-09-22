@@ -23,10 +23,10 @@ export async function AdminShell({ season, active, children }: { season?: Season
       <header className="sticky top-0 z-20 -mx-4 border-b border-line bg-bg/90 px-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <Link href="/admin" className="display text-lg font-extrabold">
-            Commissioner{season ? <span className="text-muted"> · {season.name}</span> : null}
+            Commissioner tools{season ? <span className="text-muted"> · {season.name}</span> : null}
           </Link>
           <span className="flex items-center gap-4 text-sm font-medium text-muted">
-            <span className="hidden sm:inline">{access.label}</span>
+            <span>Signed in as {access.label}</span>
             {season ? <Link href={`/${season.id}`} className="hover:text-ink">Public site</Link> : <Link href="/" className="hover:text-ink">Public site</Link>}
             <form action={signOutAction}>
               <button className="hover:text-ink">Sign out</button>

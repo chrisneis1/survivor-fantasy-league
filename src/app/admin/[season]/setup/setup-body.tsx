@@ -33,7 +33,6 @@ import {
   saveTemplateAction,
   deleteTemplateAction,
   deleteSeasonAction,
-  drawOrderAction,
 } from "@/server/actions";
 
 const Hidden = ({ season }: { season: Season }) => <input type="hidden" name="seasonId" value={season.id} />;
@@ -241,25 +240,11 @@ export async function SetupBody({ season }: { season: Season }) {
                 </div>
               </ActionForm>
             ) : null}
-            {editable && season.teams.length > 1 ? (
-              <ActionForm action={drawOrderAction} submit={season.config.openingSeedMethod === "RANDOM_DRAW" && season.config.openingSeed.length ? "Draw again" : "Draw the order"} confirm={season.config.openingSeed.length && season.config.openingSeedMethod === "RANDOM_DRAW" ? "Draw a new order? The current drawn order is replaced." : undefined}>
-                <Hidden season={season} />
-                <h3 className="font-semibold">Random draw</h3>
-                <p className="-mt-2 text-sm text-muted">The draft is one pick at a time. A random draw sets the order, and each round then reverses it (drawn Jon, Christian, Shane means the next round goes Shane, Christian, Jon). The result is recorded in the audit log.</p>
-                {season.config.openingSeed.length === season.teams.length ? (
-                  <ol className="grid gap-1 text-sm sm:grid-cols-2">
-                    {season.config.openingSeed.map((id, i) => (
-                      <li key={id}><span className="num mr-2 text-muted">{i + 1}.</span>{season.teams.find((t) => t.id === id)?.member}</li>
-                    ))}
-                  </ol>
-                ) : null}
-              </ActionForm>
-            ) : null}
             {editable && season.teams.length > 0 ? (
-              <ActionForm action={saveSeedAction} submit="Save opening order" ghost>
+              <ActionForm action={saveSeedAction} submit="Save opening order">
                 <Hidden season={season} />
-                <h3 className="font-semibold">Or enter the order yourself</h3>
-                <p className="-mt-2 text-sm text-muted">For example, if you spun a wheel elsewhere. The first position drafts first. This order also breaks ties for weekly pick order (later position picks first).</p>
+                <h3 className="font-semibold">Opening pick order</h3>
+                <p className="-mt-2 text-sm text-muted">The commissioner sets who picks first. The first position drafts first, and the order reverses each round (position 1, 2, 3 means round 2 runs 3, 2, 1). This order also breaks ties for weekly pick order (later position picks first).</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {season.teams.map((t) => (
                     <label key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-1.5 text-sm">
