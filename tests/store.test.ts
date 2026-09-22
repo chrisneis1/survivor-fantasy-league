@@ -70,6 +70,24 @@ test("create rejects a duplicate id and records its audit event", async () => {
   assert.equal((await store.list()).length, 2);
 });
 
+test("deleting a season removes it and everything scoped to it, and leaves other seasons untouched", async () => {
+  const store = fresh("delete");
+  const gone: Season = { ...ref, id: "gone", name: "Gone Season", status: "SETUP" };
+  await store.create(gone);
+  await store.setCommissioner("gone", "shane", true);
+  await store.setCredential("gone", "shane", "shane", "hash");
+  await store.logAudit([{ seasonId: "gone", actor: "t", entityType: "season", entityId: "gone", action: "SOMETHING" }]);
+
+  await store.deleteSeason("gone");
+
+  assert.equal(await store.get("gone"), null);
+  assert.equal((await store.list()).length, 1, "survivor-50 (the seed) is untouched");
+  assert.deepEqual(await store.commissioners("gone"), new Set());
+  assert.equal(await store.checkCredential("gone", "shane", () => true), null);
+  assert.deepEqual(await store.audit("gone"), []);
+  assert.equal((await store.get("survivor-50"))!.season.name, ref.name, "an unrelated season is unaffected");
+});
+
 test("member logins: only the password hash is stored, changing a login revokes the old session, wrong password finds nothing", async () => {
   const store = fresh("credentials");
   const verifyAs = (expected: string) => (hash: string) => hash === expected;

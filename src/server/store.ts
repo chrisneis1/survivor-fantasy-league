@@ -86,6 +86,29 @@ export function createStore(client: Client, seed: Season[] = []) {
       return rows[0] ? parse(rows[0]) : null;
     },
 
+    /** Permanently removes a season and everything scoped to it (audit log, member logins, roles, wagers). */
+    async deleteSeason(seasonId: string): Promise<void> {
+      await ensure();
+      const tx = await begin();
+      try {
+        for (const [table, col] of [
+          ["season_doc", "id"],
+          ["audit_event", "season_id"],
+          ["member_credential", "season_id"],
+          ["member_role", "season_id"],
+          ["wager_entry", "season_id"],
+        ] as const) {
+          await tx.execute({ sql: `DELETE FROM ${table} WHERE ${col} = ?`, args: [seasonId] });
+        }
+        await tx.commit();
+      } catch (e) {
+        await tx.rollback();
+        throw asConflict(e);
+      } finally {
+        tx.close();
+      }
+    },
+
     /** Insert a new season. Fails if the id is taken. */
     async create(season: Season, audit: AuditEvent[] = []): Promise<void> {
       await ensure();

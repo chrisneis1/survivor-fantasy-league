@@ -151,6 +151,21 @@ export async function createSeasonAction(_: ActionState, fd: FormData): Promise<
   return {};
 }
 
+/**
+ * Permanently deletes a season: the season document, its audit log, member logins, roles and wagers. Admin-only,
+ * like creating one. The commissioner must type the season's exact name, since nothing about this can be undone.
+ */
+export async function deleteSeasonAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const seasonId = str(fd, "seasonId");
+  const cur = await store().get(seasonId);
+  if (!cur) return { error: "That season no longer exists." };
+  if (str(fd, "confirmName") !== cur.season.name) return { error: "Type the season's exact name to confirm." };
+  await store().deleteSeason(seasonId);
+  revalidatePath("/", "layout");
+  redirect("/admin");
+}
+
 export async function activateSeasonAction(_: ActionState, fd: FormData) {
   return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
     const r = activateSeason(s, ctx.actor);

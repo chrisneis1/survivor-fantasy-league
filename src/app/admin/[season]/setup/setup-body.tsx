@@ -5,6 +5,7 @@ import { optionsToText, ruleUsed, rulePhases, layoutOf } from "@/domain/template
 import { validateSetup, type SetupIssue } from "@/domain/setup";
 import type { Season } from "@/domain/types";
 import { store } from "@/server";
+import { getAccess } from "@/server/auth";
 import {
   addCastawayAction,
   addEpisodeAction,
@@ -31,6 +32,7 @@ import {
   applyTemplateAction,
   saveTemplateAction,
   deleteTemplateAction,
+  deleteSeasonAction,
   drawOrderAction,
 } from "@/server/actions";
 
@@ -58,6 +60,7 @@ export async function SetupBody({ season }: { season: Season }) {
   const templates = await store().listTemplates();
   const layout = layoutOf(season);
   const categories = [...new Set(season.rules.map((r) => r.category))];
+  const access = await getAccess(season.id);
 
   return (
     <>
@@ -492,6 +495,22 @@ export async function SetupBody({ season }: { season: Season }) {
           ) : null}
           <datalist id="rule-groups">{categories.map((c) => <option key={c} value={c} />)}</datalist>
         </section>
+
+        {access?.kind === "admin" ? (
+          <section>
+            <SectionTitle>Danger zone</SectionTitle>
+            <Card className="border-bad/40 p-4">
+              <h3 className="mb-1 font-semibold text-bad">Delete this season</h3>
+              <p className="mb-3 text-sm text-muted">
+                Permanently removes {season.name} — every castaway, team, episode, score, correction, login and audit row. This cannot be undone. Type the season&apos;s exact name to confirm.
+              </p>
+              <ActionForm action={deleteSeasonAction} submit={`Delete ${season.name}`} confirm={`Delete ${season.name} permanently? There is no way to get this back.`}>
+                <Hidden season={season} />
+                <Field label="Season name"><input name="confirmName" placeholder={season.name} required className={inputCls} /></Field>
+              </ActionForm>
+            </Card>
+          </section>
+        ) : null}
       </div>
     </>
   );
