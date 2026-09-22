@@ -27,7 +27,7 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 | `src/domain/wager.ts` | Final wager: eligibility, stake limits, open/lock, winner lookup, 1:1 settlement. |
 | `src/domain/picks.ts` | Opening draft (FIXED/SNAKE), weekly windows with a frozen reverse-standings queue, multi-pick turns, pass/skip/close, the server-side legality check for every pick. |
 | `src/server` | Versioned SQLite/Turso store (compare-and-swap + audit rows), session auth, guarded server actions. |
-| `src/app` | Public: Leaderboard (`/`), This Week, Teams, Castaways, Episodes, Rules, Archive. Members: `/join/<token>` then `/<season>/my`. Commissioner: `/admin` (setup, members, score, corrections, audit). |
+| `src/app` | Public: Leaderboard (`/`), This Week, Teams, Castaways, Episodes, Rules, Archive. Members: `/<season>/sign-in` then `/<season>/my`. Commissioner: `/admin` (setup, members, score, corrections, audit). |
 
 ## Assumptions to confirm (recorded in the season config, none hard-coded in the engine)
 
@@ -52,7 +52,7 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 
 - **No timers.** The commissioner initiates every phase and picks have no time limit: they open the draft, open a pick window after publishing an episode, and can skip a team or close a window. The guide's turn timer, quiet hours and automatic expiry (§5.3) were deliberately left out.
 - **Reminders are a mail-to button, and optional.** Where a team is up, the commissioner sees "Email a reminder", which opens their own email app with the message written. The site sends no email and stores no addresses.
-- **Members sign in with a personal link.** The commissioner makes one per team (Members page) and emails it with the same mail-to approach. Only a hash is stored; making a new link revokes the old one and any device signed in with it. The cookie is per season and lasts about six months.
+- **Members sign in with a username and password.** The commissioner sets one per team (Members page) and can email it with the same mail-to approach. Only a hash of the password is stored; changing it revokes the old one and any device signed in with it. The cookie is per season and lasts about six months. (See "Member sign-in, and deleting a season" below — this replaced an earlier personal-invite-link design.)
 - **Every pick is re-validated on the server** (turn, slot, tribe restriction, duplicate, ownership cap, swap credits or free entitlement, eliminated castaway) and saved with a version check. A member who loses a race for the last ownership slot is retried against fresh state and told the real reason.
 - **The queue is frozen** when a window opens (lowest points first; ties: later opening seed first) and does not move if a score is corrected. Teams with no legal pick are auto-skipped with the reason shown.
 - New seasons can either use the draft (Members pick) or the commissioner-entry path from phase 3.
@@ -93,6 +93,16 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 
 - **Publishing the draft is now decoupled from the rest of setup.** "Publish teams & pick order" only needs the cast, tribes, slots, teams and pick order — not episodes or scoring values, which a league often finalizes closer to air date. Once published, teams and the order lock in and each member drafts from their own link; episodes/scoring stay editable in Setup the whole time, before, during or after the draft. The old "enter every roster yourself" path is still there as a secondary option, now behind a details toggle, and it still needs everything (since it skips the draft and goes straight to active).
 - **Team names are filler until someone sets them.** A new team still defaults to "Member's Team"; from there, either the commissioner (Setup → Teams) or the member themselves (My Team → Team name) can rename it, any time before the season is archived — deliberately not gated to setup, since some people like to wait.
+
+## Member sign-in, and deleting a season
+
+- **Members sign in with a username and password**, not a personal invite link. The commissioner sets and edits
+  each team's login from Setup → Members; only a scrypt hash of the password is stored, and saving a new one
+  immediately signs out any device using the old one. (Replaces an earlier per-team invite-link design, whose emailed
+  link could resolve to the wrong host depending on how a proxy forwarded request headers — the new flow builds no
+  URL at all, so there's nothing left to get wrong.)
+- **A season can be deleted** from Setup → Danger zone (admin login only), removing the season document, its audit
+  log, member logins, roles and wagers together. It requires typing the season's exact name first; there is no undo.
 
 ## An episode that doesn't count, and a cast entered before tribes exist
 
