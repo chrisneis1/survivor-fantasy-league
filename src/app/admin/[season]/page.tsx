@@ -44,7 +44,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
         {season.status === "SETUP"
           ? "This season is being set up. Activate it once setup is complete."
           : season.status === "OPENING_SELECTION"
-            ? "The draft is under way. Members pick from their personal links."
+            ? "The draft is under way. Members pick after signing in."
             : season.status === "ACTIVE"
             ? nextUnpublished
               ? `Next up: score ${nextUnpublished.title}.`
@@ -56,7 +56,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
         <Card className="mb-8 p-4">
           <SectionTitle aside={<Link href={`/admin/${season.id}/setup`} className="font-semibold text-accent hover:underline">Open setup →</Link>}>Publish teams &amp; pick order</SectionTitle>
           <p className="mb-3 text-sm text-muted">
-            Set up your teams and the draft order in Setup, then publish here. Once you do, they lock in and each member drafts their own roster from their personal link — you don&apos;t need episodes or scoring finished first.
+            Set up your teams and the draft order in Setup, then publish here. Once you do, they lock in and each member drafts their own roster after signing in — you don&apos;t need episodes or scoring finished first.
           </p>
           {draftIssues.length === 0 ? (
             <p className="mb-3 text-sm text-good">✓ Ready to publish.</p>
@@ -74,7 +74,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
             action={openOpeningSelectionAction}
             submit="Publish teams & pick order"
             disabled={draftErrors.length > 0 || season.teams.some((t) => t.draft.some(Boolean))}
-            confirm="Publish the teams and pick order? Each member can then draft their own roster from their personal link."
+            confirm="Publish the teams and pick order? Each member can then draft their own roster after signing in."
           >
             <input type="hidden" name="seasonId" value={season.id} />
           </ActionForm>
@@ -100,7 +100,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
           <p className="mb-1 text-sm">
             Pick {draftTurn.index + 1} of {draftTurn.total} · Round {draftTurn.round}. Up now: <strong>{teamOf(season, draftTurn.teamId).member}</strong>.
           </p>
-          <p className="mb-4 text-sm text-muted">Each member needs their personal link (see Members). If someone can&apos;t get to the site, you can pick for them below; it is logged with your reason.</p>
+          <p className="mb-4 text-sm text-muted">Each member needs their login (see Members). If someone can&apos;t get to the site, you can pick for them below; it is logged with your reason.</p>
           <ActionForm action={adminOpeningPickAction} submit="Pick for this team" ghost resetOnSuccess confirm="Make this pick on the team's behalf?">
             <input type="hidden" name="seasonId" value={season.id} />
             <div className="grid gap-3 sm:grid-cols-3">

@@ -2,13 +2,14 @@ import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { store } from "./index";
-import { MEMBER_TTL_MS, SESSION_TTL_MS, createLimiter, passcodeMatches, signMember, signSession, verifyMember, verifySession } from "./session";
+import { MEMBER_TTL_MS, SESSION_TTL_MS, createLimiter, passcodeMatches, signMember, signSession, verifyMember, verifyPassword, verifySession } from "./session";
 
 // ---------------------------------------------------------------------------------------------------------------
 // Two ways to be a commissioner:
 //  1. The admin login (a password). It needs no account, so it is always reachable: it creates seasons and sets roles.
-//  2. A member who has been given the commissioner role. They use their own personal link, so what they do is logged
-//     under their name, and they can run the seasons they hold the role for. Only the admin login can change roles.
+//  2. A member who has been given the commissioner role. They sign in with their own username/password, so what they
+//     do is logged under their name, and they can run the seasons they hold the role for. Only the admin login can
+//     change roles.
 // ---------------------------------------------------------------------------------------------------------------
 
 /** The password used when COMMISSIONER_PASSCODE is not set. Deliberately simple: set the variable before going public. */
@@ -82,26 +83,32 @@ export async function signOut(): Promise<void> {
 
 // One cookie per season, so a member of two seasons is signed in to both.
 const memberCookie = (seasonId: string) => `league_member_${seasonId.replace(/[^a-z0-9-]/gi, "")}`;
+const memberLimiter = createLimiter();
 
-/** Turns a personal invite link into a member session cookie. Returns the season to send them to, or null if the link is not valid. */
-export async function establishMember(token: string): Promise<{ seasonId: string } | null> {
-  const invite = await store().findInvite(token);
-  if (!invite) return null;
-  (await cookies()).set(memberCookie(invite.seasonId), signMember(secret(), { season: invite.seasonId, team: invite.teamId, k: invite.key }), {
+/** Signs a member in with the username/password the commissioner set for their team. */
+export async function signInMember(seasonId: string, username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (memberLimiter.blocked()) return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+  const found = await store().checkCredential(seasonId, username.trim(), (hash) => verifyPassword(password, hash));
+  if (!found) {
+    memberLimiter.fail();
+    return { ok: false, error: "That username or password is not right." };
+  }
+  memberLimiter.reset();
+  (await cookies()).set(memberCookie(seasonId), signMember(secret(), { season: seasonId, team: found.teamId, k: found.key }), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: MEMBER_TTL_MS / 1000,
   });
-  return { seasonId: invite.seasonId };
+  return { ok: true };
 }
 
-/** The team the visitor is signed in as for this season, or null. Checked against the live invite so a new link revokes old sessions. */
+/** The team the visitor is signed in as for this season, or null. Checked against the live credential so a changed password revokes old sessions. */
 export async function getMember(seasonId: string): Promise<string | null> {
   const s = verifyMember(secret(), (await cookies()).get(memberCookie(seasonId))?.value);
   if (!s || s.season !== seasonId) return null;
-  return (await store().inviteKey(seasonId, s.team)) === s.k ? s.team : null;
+  return (await store().credentialKey(seasonId, s.team)) === s.k ? s.team : null;
 }
 
 export async function signOutMember(seasonId: string): Promise<void> {

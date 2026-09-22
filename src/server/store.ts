@@ -1,7 +1,7 @@
 // Persistence: one versioned document per season plus an append-only audit log.
 // A write only succeeds if the caller saw the latest version (compare-and-swap inside a transaction),
 // so two commissioners — or, in phase 4, two members grabbing the last ownership slot — cannot both win.
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { createClient, type Client } from "@libsql/client";
 import { migrateSeason } from "@/domain/migrate";
@@ -37,7 +37,7 @@ export function createStore(client: Client, seed: Season[] = []) {
            id INTEGER PRIMARY KEY AUTOINCREMENT, season_id TEXT NOT NULL, actor TEXT NOT NULL, entity_type TEXT NOT NULL,
            entity_id TEXT NOT NULL, action TEXT NOT NULL, before_json TEXT, after_json TEXT, reason TEXT, created_at TEXT NOT NULL)`,
         `CREATE INDEX IF NOT EXISTS audit_by_season ON audit_event (season_id, id)`,
-        // Who holds the commissioner role in a season (a member signed in with their personal link).
+        // Who holds the commissioner role in a season (a member signed in with their username and password).
         `CREATE TABLE IF NOT EXISTS member_role (
            season_id TEXT NOT NULL, team_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL,
            PRIMARY KEY (season_id, team_id, role))`,
@@ -48,10 +48,12 @@ export function createStore(client: Client, seed: Season[] = []) {
         `CREATE TABLE IF NOT EXISTS wager_entry (
            season_id TEXT NOT NULL, team_id TEXT NOT NULL, castaway_id TEXT NOT NULL, stake INTEGER NOT NULL, updated_at TEXT NOT NULL,
            PRIMARY KEY (season_id, team_id))`,
-        // Only a hash of each invite token is stored, so the database never holds a usable link.
-        `CREATE TABLE IF NOT EXISTS member_invite (
-           season_id TEXT NOT NULL, team_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
-           PRIMARY KEY (season_id, team_id))`,
+        // A team's sign-in: set and edited by the commissioner from Members. Only a scrypt hash of the password is
+        // stored; `session_key` changes on every save, so saving a new username/password revokes any signed-in device.
+        `CREATE TABLE IF NOT EXISTS member_credential (
+           season_id TEXT NOT NULL, team_id TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL,
+           session_key TEXT NOT NULL, updated_at TEXT NOT NULL,
+           PRIMARY KEY (season_id, team_id), UNIQUE (season_id, username))`,
       ],
       "write",
     );
@@ -165,35 +167,45 @@ export function createStore(client: Client, seed: Season[] = []) {
       await client.execute({ sql: "DELETE FROM scoring_template WHERE id = ?", args: [id] });
     },
 
-    /** Issues a new personal invite for a team, replacing (and so revoking) any earlier one. Returns the secret token once. */
-    async createInvite(seasonId: string, teamId: string): Promise<string> {
+    /**
+     * Sets or changes a team's sign-in. Replaces (and so signs out) any earlier login for this team. Throws if the
+     * username is already taken by another team in the season.
+     */
+    async setCredential(seasonId: string, teamId: string, username: string, passwordHash: string): Promise<void> {
       await ensure();
-      const token = randomBytes(24).toString("base64url");
-      await client.execute({
-        sql: "INSERT INTO member_invite (season_id, team_id, token_hash, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (season_id, team_id) DO UPDATE SET token_hash = excluded.token_hash, created_at = excluded.created_at",
-        args: [seasonId, teamId, hashToken(token), new Date().toISOString()],
-      });
-      return token;
+      const sessionKey = randomBytes(12).toString("base64url");
+      try {
+        await client.execute({
+          sql: "INSERT INTO member_credential (season_id, team_id, username, password_hash, session_key, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (season_id, team_id) DO UPDATE SET username = excluded.username, password_hash = excluded.password_hash, session_key = excluded.session_key, updated_at = excluded.updated_at",
+          args: [seasonId, teamId, username, passwordHash, sessionKey, new Date().toISOString()],
+        });
+      } catch (e) {
+        if (/UNIQUE/i.test(String(e))) throw new Error("That username is already taken by another team in this season.");
+        throw e;
+      }
     },
 
-    async findInvite(token: string): Promise<{ seasonId: string; teamId: string; key: string } | null> {
+    /** Checks a sign-in attempt. Returns the team and a session key, or null if the username/password don't match. */
+    async checkCredential(seasonId: string, username: string, verify: (hash: string) => boolean): Promise<{ teamId: string; key: string } | null> {
       await ensure();
-      const h = hashToken(token);
-      const { rows } = await client.execute({ sql: "SELECT season_id, team_id FROM member_invite WHERE token_hash = ?", args: [h] });
-      return rows[0] ? { seasonId: String(rows[0].season_id), teamId: String(rows[0].team_id), key: h.slice(0, 16) } : null;
+      const { rows } = await client.execute({ sql: "SELECT team_id, password_hash, session_key FROM member_credential WHERE season_id = ? AND username = ?", args: [seasonId, username] });
+      const row = rows[0];
+      if (!row || !verify(String(row.password_hash))) return null;
+      return { teamId: String(row.team_id), key: String(row.session_key) };
     },
 
-    /** The current invite's key for a team (what a valid member cookie must carry), or null if there is none. */
-    async inviteKey(seasonId: string, teamId: string): Promise<string | null> {
+    /** The session key a member's cookie must currently carry, or null if the team has no login set. */
+    async credentialKey(seasonId: string, teamId: string): Promise<string | null> {
       await ensure();
-      const { rows } = await client.execute({ sql: "SELECT token_hash FROM member_invite WHERE season_id = ? AND team_id = ?", args: [seasonId, teamId] });
-      return rows[0] ? String(rows[0].token_hash).slice(0, 16) : null;
+      const { rows } = await client.execute({ sql: "SELECT session_key FROM member_credential WHERE season_id = ? AND team_id = ?", args: [seasonId, teamId] });
+      return rows[0] ? String(rows[0].session_key) : null;
     },
 
-    async invitedTeams(seasonId: string): Promise<Set<string>> {
+    /** Every team's current username (never the password), for the Members page. */
+    async credentials(seasonId: string): Promise<Map<string, string>> {
       await ensure();
-      const { rows } = await client.execute({ sql: "SELECT team_id FROM member_invite WHERE season_id = ?", args: [seasonId] });
-      return new Set(rows.map((r) => String(r.team_id)));
+      const { rows } = await client.execute({ sql: "SELECT team_id, username FROM member_credential WHERE season_id = ?", args: [seasonId] });
+      return new Map(rows.map((r) => [String(r.team_id), String(r.username)]));
     },
 
     /**
@@ -276,8 +288,6 @@ export function createStore(client: Client, seed: Season[] = []) {
     },
   };
 }
-
-const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** A writer that loses a lock race is a conflict like any other stale write: nothing was changed, retry. */
 function asConflict(e: unknown): unknown {

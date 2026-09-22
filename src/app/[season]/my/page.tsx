@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
-import { inputCls } from "@/components/styles";
+import { btnGhostCls, inputCls } from "@/components/styles";
 import { PickPanel } from "@/components/pick-panel";
 import { SeasonShell } from "@/components/shell";
 import { Card, PageTitle, Pill, SectionTitle } from "@/components/ui";
@@ -13,7 +13,7 @@ import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, teamOf } from "@/lib/view";
 import { wagerCandidates } from "@/domain/wager";
 import { store } from "@/server";
-import { placeWagerAction, renameMyTeamAction } from "@/server/actions";
+import { placeWagerAction, renameMyTeamAction, signOutMemberAction } from "@/server/actions";
 import { getMember } from "@/server/auth";
 import type { Season } from "@/domain/types";
 
@@ -28,7 +28,7 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
     return (
       <SeasonShell season={season} active="/my">
         <PageTitle eyebrow={season.name} title="My Team">
-          This page is for team owners. Open the personal link your commissioner sent you (it signs you in on this device). If it doesn&apos;t work any more, ask for a new one.
+          This page is for team owners. <Link href={seasonPath(season.id, "/sign-in")} className="text-accent hover:underline">Sign in</Link> with the username and password your commissioner gave you. If it doesn&apos;t work any more, ask them to set a new one.
         </PageTitle>
       </SeasonShell>
     );
@@ -125,6 +125,12 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
             <input name="name" defaultValue={team.name} required maxLength={60} className={`${inputCls} max-w-xs`} />
           </ActionForm>
         </Card>
+      </div>
+
+      <div className="mt-8">
+        <form action={signOutMemberAction.bind(null, season.id)}>
+          <button className={btnGhostCls}>Sign out</button>
+        </form>
       </div>
 
       {myTx.length ? (

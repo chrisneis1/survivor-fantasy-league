@@ -3,7 +3,6 @@
 // rules, and writes through the versioned store together with its audit rows.
 import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn } from "@/domain/picks";
 import { correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
@@ -11,15 +10,16 @@ import { activateSeason, createSeason, finalizeSeason, renameTeam, rosterProblem
 import { addRule, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
 import { lockWagers, openWagers, wagerProblem } from "@/domain/wager";
-import { type Access, getMember, requireAccess, requireAdmin, signIn, signOut, signOutMember } from "./auth";
+import { type Access, getMember, requireAccess, requireAdmin, signIn, signInMember, signOut, signOutMember } from "./auth";
+import { hashPassword } from "./session";
 import { store } from "./index";
 import { ConflictError } from "./store";
 
 export interface ActionState {
   ok?: string;
   error?: string;
-  /** A personal invite link to show once, with a ready-made mail-to for sending it. */
-  link?: string;
+  /** A username/password just set for a team, shown once so the commissioner can pass it along. */
+  credential?: { username: string; password: string };
   mailto?: string;
 }
 
@@ -99,8 +99,8 @@ export async function signOutAction() {
   redirect("/");
 }
 
-export async function signOutMemberAction(_: ActionState, fd: FormData) {
-  await signOutMember(str(fd, "seasonId"));
+export async function signOutMemberAction(seasonId: string) {
+  await signOutMember(seasonId);
   redirect("/");
 }
 
@@ -532,23 +532,35 @@ export async function skipTurnAction(_: ActionState, fd: FormData) {
   });
 }
 
-/** Creates a personal invite link for a team. The link is shown once; only its hash is kept. */
-export async function createInviteAction(_: ActionState, fd: FormData): Promise<ActionState> {
+/** Sets or changes a team's sign-in. Only the hash is stored; the password is returned once so it can be passed along. */
+export async function setCredentialAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const seasonId = str(fd, "seasonId");
   const access = await requireAccess(seasonId);
   const teamId = str(fd, "teamId");
   const cur = await store().get(seasonId);
   const team = cur?.season.teams.find((t) => t.id === teamId);
   if (!cur || !team) return { error: "Unknown team." };
-  const token = await store().createInvite(seasonId, teamId);
-  await store().logAudit([change(cur.season, access.actor, "invite", teamId, "ISSUE_INVITE", undefined, undefined, "Any earlier link for this team stopped working.")]);
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const link = `${proto}://${host}/join/${token}`;
-  const subject = `Your link for ${cur.season.name}`;
-  const body = `Hi ${team.member},\n\nHere is your personal link for ${cur.season.name}. Open it once on the device you'll use; it keeps you signed in.\n\n${link}\n\nPlease don't share it: it lets whoever has it make picks for your team.`;
-  return { ok: `Link ready for ${team.member}. Any earlier link for them no longer works.`, link, mailto: `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}` };
+  const username = str(fd, "username").toLowerCase();
+  const password = str(fd, "password");
+  if (!username) return { error: "Give them a username." };
+  if (password.length < 4) return { error: "Passwords need to be at least 4 characters." };
+  try {
+    await store().setCredential(seasonId, teamId, username, hashPassword(password));
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not save the login." };
+  }
+  await store().logAudit([change(cur.season, access.actor, "credential", teamId, "SET_CREDENTIAL", undefined, { username }, "Any earlier login for this team stopped working.")]);
+  const subject = `Your sign-in for ${cur.season.name}`;
+  const body = `Hi ${team.member},\n\nHere is your sign-in for ${cur.season.name}. Open the site, click "Sign in" at the top, and enter:\n\nUsername: ${username}\nPassword: ${password}\n\nPlease don't share it: it lets whoever has it make picks for your team.`;
+  return { ok: `Login ready for ${team.member}. Any earlier login for them no longer works.`, credential: { username, password }, mailto: `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}` };
+}
+
+/** A member signs in with the username/password the commissioner set for their team. */
+export async function memberSignInAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const seasonId = str(fd, "seasonId");
+  const r = await signInMember(seasonId, str(fd, "username"), str(fd, "password"));
+  if (!r.ok) return { error: r.error };
+  redirect(`/${seasonId}/my`);
 }
 
 // ---------- member picks ----------

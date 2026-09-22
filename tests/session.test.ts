@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createLimiter, passcodeMatches, SESSION_TTL_MS, signSession, verifySession } from "../src/server/session";
+import { createLimiter, hashPassword, passcodeMatches, SESSION_TTL_MS, signSession, verifyPassword, verifySession } from "../src/server/session";
 
 const secret = "s".repeat(40);
 
@@ -22,6 +22,14 @@ test("tampered, foreign, malformed and missing tokens are rejected", () => {
   assert.equal(verifySession(secret, "nonsense"), false);
   assert.equal(verifySession(secret, ""), false);
   assert.equal(verifySession(secret, undefined), false);
+});
+
+test("a hashed password verifies against the right password, rejects the wrong one, and never stores the password itself", () => {
+  const stored = hashPassword("correct-horse");
+  assert.equal(verifyPassword("correct-horse", stored), true);
+  assert.equal(verifyPassword("wrong", stored), false);
+  assert.doesNotMatch(stored, /correct-horse/);
+  assert.notEqual(hashPassword("correct-horse"), stored, "a fresh salt makes every hash different, even for the same password");
 });
 
 test("passcode comparison rejects wrong, empty and unconfigured values", () => {

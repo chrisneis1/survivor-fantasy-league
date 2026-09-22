@@ -1,6 +1,6 @@
 // Commissioner session primitives. Pure (no framework imports) so they can be unit-tested.
 // This is a placeholder for the guide's passwordless-email / OAuth sign-in: one shared passcode, one role.
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -48,9 +48,29 @@ export function createLimiter(max = 5, windowMs = 15 * 60 * 1000) {
   };
 }
 
+// ---------- member passwords ----------
+// scrypt, not the fast SHA-256 used for the admin passcode/invite hashes above: a member-chosen password has much
+// lower entropy, so the hash needs to be deliberately slow to brute-force.
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64);
+  return `${salt.toString("hex")}:${hash.toString("hex")}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const salt = Buffer.from(saltHex, "hex");
+  const expected = Buffer.from(hashHex, "hex");
+  const actual = scryptSync(password, salt, expected.length);
+  return timingSafeEqual(actual, expected);
+}
+
 // ---------- member sessions ----------
-// A member arrives through a personal invite link and gets a long-lived cookie naming their team. `k` is a prefix of the
-// invite's hash, so issuing a new invite link revokes every session made with the old one.
+// A member signs in with a username and password set for their team, and gets a long-lived cookie naming their team.
+// `k` is a per-credential key that changes whenever the commissioner sets a new username/password, so changing
+// someone's login revokes every session made with the old one.
 
 export const MEMBER_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 

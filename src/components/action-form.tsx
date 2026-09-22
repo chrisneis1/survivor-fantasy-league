@@ -56,32 +56,41 @@ export function ActionForm({
         {state.error ? <p role="alert" className="text-sm font-medium text-bad">✕ {state.error}</p> : null}
         {state.ok ? <p role="status" className="text-sm font-medium text-good">✓ {state.ok}</p> : null}
       </div>
-      {state.link ? <InviteLink link={state.link} mailto={state.mailto} /> : null}
+      {state.credential ? <Credential credential={state.credential} mailto={state.mailto} /> : null}
     </form>
   );
 }
 
-/** A personal link shown once. The commissioner can copy it or open a ready-written email (the site sends nothing). */
-function InviteLink({ link, mailto }: { link: string; mailto?: string }) {
+/** A team's username/password, shown once. The commissioner can copy the password or open a ready-written email (the site sends nothing). */
+function Credential({ credential, mailto }: { credential: { username: string; password: string }; mailto?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm">
-      <p className="mb-2 font-semibold text-accent">Personal link. It is shown only now.</p>
-      <input readOnly value={link} aria-label="Personal link" onFocus={(e) => e.currentTarget.select()} className={inputCls} />
+      <p className="mb-2 font-semibold text-accent">Login saved. The password is shown only now.</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-muted">Username</span>
+          <input readOnly value={credential.username} aria-label="Username" onFocus={(e) => e.currentTarget.select()} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-muted">Password</span>
+          <input readOnly value={credential.password} aria-label="Password" onFocus={(e) => e.currentTarget.select()} className={inputCls} />
+        </label>
+      </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
           className={btnGhostCls}
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(link);
+              await navigator.clipboard.writeText(`Username: ${credential.username}\nPassword: ${credential.password}`);
               setCopied(true);
             } catch {
-              /* the field above is selectable as a fallback */
+              /* the fields above are selectable as a fallback */
             }
           }}
         >
-          {copied ? "Copied" : "Copy link"}
+          {copied ? "Copied" : "Copy both"}
         </button>
         {mailto ? <a href={mailto} className={btnCls}>Email it</a> : null}
       </div>

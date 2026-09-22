@@ -70,25 +70,28 @@ test("create rejects a duplicate id and records its audit event", async () => {
   assert.equal((await store.list()).length, 2);
 });
 
-test("invite links: only the hash is stored, a new link revokes the old one, unknown tokens find nothing", async () => {
-  const store = fresh("invites");
-  const t1 = await store.createInvite("survivor-50", "shane");
-  const found = await store.findInvite(t1);
-  assert.deepEqual({ s: found!.seasonId, t: found!.teamId }, { s: "survivor-50", t: "shane" });
-  assert.equal(await store.inviteKey("survivor-50", "shane"), found!.key);
-  assert.equal(await store.findInvite("not-a-token"), null);
+test("member logins: only the password hash is stored, changing a login revokes the old session, wrong password finds nothing", async () => {
+  const store = fresh("credentials");
+  const verifyAs = (expected: string) => (hash: string) => hash === expected;
+  await store.setCredential("survivor-50", "shane", "shane", "hash-v1");
+  const found = await store.checkCredential("survivor-50", "shane", verifyAs("hash-v1"));
+  assert.deepEqual(found, { teamId: "shane", key: found!.key });
+  assert.equal(await store.credentialKey("survivor-50", "shane"), found!.key);
+  assert.equal(await store.checkCredential("survivor-50", "shane", verifyAs("wrong-hash")), null, "a wrong password matches nothing");
+  assert.equal(await store.checkCredential("survivor-50", "nobody", verifyAs("hash-v1")), null, "an unknown username matches nothing");
 
-  const raw = createClient({ url: `file:${join(dir, "invites.db")}` });
-  const { rows } = await raw.execute("SELECT token_hash FROM member_invite");
-  assert.notEqual(rows[0].token_hash, t1, "the token itself is never stored");
+  const raw = createClient({ url: `file:${join(dir, "credentials.db")}` });
+  const { rows } = await raw.execute("SELECT password_hash FROM member_credential");
+  assert.equal(rows[0].password_hash, "hash-v1", "the hash is stored, never the plain password");
   raw.close();
 
-  const t2 = await store.createInvite("survivor-50", "shane");
-  assert.notEqual(t1, t2);
-  assert.equal(await store.findInvite(t1), null, "the old link no longer works");
-  assert.notEqual((await store.findInvite(t2))!.key, found!.key, "sessions from the old link no longer match");
-  await store.createInvite("survivor-50", "gabby");
-  assert.deepEqual([...(await store.invitedTeams("survivor-50"))].sort(), ["gabby", "shane"]);
+  await store.setCredential("survivor-50", "shane", "shane", "hash-v2");
+  assert.notEqual(await store.credentialKey("survivor-50", "shane"), found!.key, "changing the login revokes sessions made with the old one");
+  assert.equal(await store.checkCredential("survivor-50", "shane", verifyAs("hash-v1")), null, "the old password no longer works");
+
+  await store.setCredential("survivor-50", "gabby", "gabby", "hash-g");
+  await assert.rejects(store.setCredential("survivor-50", "cori", "gabby", "hash-c"), /already taken/, "usernames are unique within a season");
+  assert.deepEqual([...(await store.credentials("survivor-50")).entries()].sort(), [["gabby", "gabby"], ["shane", "shane"]]);
 });
 
 test("the commissioner role is per season, off by default, and toggles cleanly", async () => {

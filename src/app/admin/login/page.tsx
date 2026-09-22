@@ -26,7 +26,7 @@ export default async function Login() {
         ) : null}
       </Card>
       <p className="mt-4 text-center text-sm text-muted">
-        Everyone else can browse the public site without signing in. A league member with the commissioner role signs in from their own personal link instead of here.
+        Everyone else can browse the public site without signing in. A league member with the commissioner role signs in with their own username and password instead of here.
       </p>
     </div>
   );

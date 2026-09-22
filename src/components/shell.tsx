@@ -43,7 +43,7 @@ export async function SeasonShell({ season, active, children }: { season: Season
           </span>
         </div>
         <nav aria-label="Sections" className="no-scrollbar -mx-4 mt-2 flex gap-1 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
-          {[...nav, ...(member ? [{ path: "/my", label: "My Team" }] : [])].map((n) => (
+          {[...nav, member ? { path: "/my", label: "My Team" } : { path: "/sign-in", label: "Sign in" }].map((n) => (
             <Link
               key={n.path}
               href={seasonPath(season.id, n.path)}
