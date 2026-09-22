@@ -83,17 +83,25 @@ export async function signOut(): Promise<void> {
 
 // One cookie per season, so a member of two seasons is signed in to both.
 const memberCookie = (seasonId: string) => `league_member_${seasonId.replace(/[^a-z0-9-]/gi, "")}`;
-const memberLimiter = createLimiter();
+// One limiter per (season, username): a lockout is personal, never shared across the whole league.
+const memberLimiters = new Map<string, ReturnType<typeof createLimiter>>();
+const memberLimiterFor = (seasonId: string, username: string) => {
+  const key = `${seasonId}:${username}`;
+  let l = memberLimiters.get(key);
+  if (!l) memberLimiters.set(key, (l = createLimiter()));
+  return l;
+};
 
 /** Signs a member in with the username/password the commissioner set for their team. */
 export async function signInMember(seasonId: string, username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (memberLimiter.blocked()) return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+  const limiter = memberLimiterFor(seasonId, username.trim());
+  if (limiter.blocked()) return { ok: false, error: "Too many attempts. Try again in a few minutes." };
   const found = await store().checkCredential(seasonId, username.trim(), (hash) => verifyPassword(password, hash));
   if (!found) {
-    memberLimiter.fail();
+    limiter.fail();
     return { ok: false, error: "That username or password is not right." };
   }
-  memberLimiter.reset();
+  limiter.reset();
   (await cookies()).set(memberCookie(seasonId), signMember(secret(), { season: seasonId, team: found.teamId, k: found.key }), {
     httpOnly: true,
     sameSite: "lax",
