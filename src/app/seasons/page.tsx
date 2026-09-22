@@ -16,7 +16,7 @@ export default async function Archive() {
       <ul className="grid gap-3">
         {(await allSeasons()).map((s) => {
           const top = standings(s)[0];
-          const winner = s.teams.find((t) => t.id === top.teamId)!;
+          const winner = top ? s.teams.find((t) => t.id === top.teamId) : undefined;
           return (
             <li key={s.id}>
               <Link href={seasonPath(s.id)} className="group block">
@@ -27,11 +27,13 @@ export default async function Archive() {
                     </p>
                     <p className="text-sm text-muted">{s.teams.length} teams · {s.castaways.length} castaways · {s.episodes.length} episodes</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted">Winner</p>
-                    <p className="font-semibold">{winner.name}</p>
-                    <p className="num text-sm text-muted">{winner.member} · {top.total} pts</p>
-                  </div>
+                  {winner ? (
+                    <div className="text-right">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-muted">Winner</p>
+                      <p className="font-semibold">{winner.name}</p>
+                      <p className="num text-sm text-muted">{winner.member} · {top.total} pts</p>
+                    </div>
+                  ) : null}
                 </Card>
               </Link>
             </li>
