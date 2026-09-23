@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ActionForm, Field } from "@/components/action-form";
-import { inputCls } from "@/components/styles";
+import { ActionForm } from "@/components/action-form";
 import { AdminShell } from "@/components/admin-shell";
 import { Card, PageTitle, Pill, PolicyPill, SectionTitle } from "@/components/ui";
 import { getSeason } from "@/data";
@@ -11,7 +10,7 @@ import { validateSetup } from "@/domain/setup";
 import { episodeLabel } from "@/lib/format";
 import { teamOf } from "@/lib/view";
 import { store } from "@/server";
-import { activateSeasonAction, adminOpeningPickAction, finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction } from "@/server/actions";
+import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction } from "@/server/actions";
 
 export const metadata = { title: "Commissioner" };
 
@@ -26,8 +25,6 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
   // when the season actually airs.
   const draftIssues = season.status === "SETUP" ? validateSetup(season, { rosters: false, episodes: false, scoring: false }) : [];
   const draftErrors = draftIssues.filter((i) => i.level === "error");
-  const fullIssues = season.status === "SETUP" ? validateSetup(season) : [];
-  const fullErrors = fullIssues.filter((i) => i.level === "error");
   const allPublished = season.episodes.length > 0 && season.episodes.every((e) => e.state === "PUBLISHED");
   const nextUnpublished = season.episodes.find((e) => e.state !== "PUBLISHED");
   const draftTurn = openingTurn(season);
@@ -54,12 +51,12 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
 
       {season.status === "SETUP" ? (
         <Card className="mb-8 p-4">
-          <SectionTitle aside={<Link href={`/admin/${season.id}/setup`} className="font-semibold text-accent hover:underline">Open setup →</Link>}>Publish teams &amp; pick order</SectionTitle>
+          <SectionTitle aside={<Link href={`/admin/${season.id}/setup`} className="font-semibold text-accent hover:underline">Open setup →</Link>}>Launch to the draft phase</SectionTitle>
           <p className="mb-3 text-sm text-muted">
-            Set up your teams and the draft order in Setup, then publish here. Once you do, they lock in and each member drafts their own roster after signing in — you don&apos;t need episodes or scoring finished first.
+            Finish everything in Setup except opening rosters — those are what the draft is for. Launching locks in the teams and pick order and opens the draft board; you don&apos;t need episodes or scoring finished first.
           </p>
           {draftIssues.length === 0 ? (
-            <p className="mb-3 text-sm text-good">✓ Ready to publish.</p>
+            <p className="mb-3 text-sm text-good">✓ Ready to launch.</p>
           ) : (
             <ul className="mb-3 grid gap-1.5 text-sm">
               {draftIssues.slice(0, 8).map((i, k) => (
@@ -72,51 +69,24 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
           )}
           <ActionForm
             action={openOpeningSelectionAction}
-            submit="Publish teams & pick order"
+            submit="Launch to draft phase"
             disabled={draftErrors.length > 0 || season.teams.some((t) => t.draft.some(Boolean))}
-            confirm="Publish the teams and pick order? Each member can then draft their own roster after signing in."
+            confirm="Launch the draft? Teams and the pick order lock in, and the draft board opens."
           >
             <input type="hidden" name="seasonId" value={season.id} />
           </ActionForm>
-
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-semibold text-muted hover:text-ink">Or skip the draft and enter every roster yourself</summary>
-            <p className="mb-2 mt-2 text-sm text-muted">No member picking at all — you fill in every team's roster in Setup, then activate directly. This does need episodes and scoring configured too, since the season goes straight to active.</p>
-            {fullErrors.length > draftErrors.length ? (
-              <ul className="mb-2 grid gap-1 text-sm text-muted">
-                {fullIssues.filter((i) => i.level === "error" && !draftErrors.includes(i)).slice(0, 6).map((i, k) => <li key={k}>✕ {i.message}</li>)}
-              </ul>
-            ) : null}
-            <ActionForm action={activateSeasonAction} submit="Activate season" ghost disabled={fullErrors.length > 0} confirm="Activate this season? Rosters, teams and the cast lock; episodes can then be scored.">
-              <input type="hidden" name="seasonId" value={season.id} />
-            </ActionForm>
-          </details>
         </Card>
       ) : null}
 
       {season.status === "OPENING_SELECTION" && draftTurn ? (
         <Card className="mb-8 p-4">
-          <SectionTitle aside={<Link href={`/${season.id}/this-week`} className="font-semibold text-accent hover:underline">Draft board →</Link>}>The draft</SectionTitle>
-          <p className="mb-1 text-sm">
+          <SectionTitle>The draft</SectionTitle>
+          <p className="mb-3 text-sm">
             Pick {draftTurn.index + 1} of {draftTurn.total} · Round {draftTurn.round}. Up now: <strong>{teamOf(season, draftTurn.teamId).member}</strong>.
           </p>
-          <p className="mb-4 text-sm text-muted">Each member needs their login (see Members). If someone can&apos;t get to the site, you can pick for them below; it is logged with your reason.</p>
-          <ActionForm action={adminOpeningPickAction} submit="Pick for this team" ghost resetOnSuccess confirm="Make this pick on the team's behalf?">
-            <input type="hidden" name="seasonId" value={season.id} />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Slot">
-                <select name="slot" className={inputCls}>
-                  {season.slots.map((sl, i) => (teamOf(season, draftTurn.teamId).draft[i] ? null : <option key={sl.id} value={i}>{sl.name}</option>))}
-                </select>
-              </Field>
-              <Field label="Castaway">
-                <select name="castaway" className={inputCls}>
-                  {season.castaways.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Reason (required)"><input name="reason" required className={inputCls} /></Field>
-            </div>
-          </ActionForm>
+          <Link href={`/admin/${season.id}/draft`} className="inline-block rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-ink">
+            Open the draft board →
+          </Link>
         </Card>
       ) : null}
 

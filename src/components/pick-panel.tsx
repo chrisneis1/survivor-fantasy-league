@@ -15,6 +15,7 @@ export function PickPanel({
   slots,
   candidates,
   remaining,
+  onPick,
 }: {
   seasonId: string;
   mode: "opening" | "replace";
@@ -22,6 +23,8 @@ export function PickPanel({
   candidates: PickCandidate[];
   /** Replacements still available this turn (replace mode). */
   remaining?: number;
+  /** Overrides the default member actions — used by the commissioner's draft board to pick on a team's behalf. */
+  onPick?: (slot: number, castawayId: string) => Promise<{ ok?: string; error?: string }>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -49,7 +52,7 @@ export function PickPanel({
     if (!chosen) return;
     const what = mode === "opening" ? `Pick ${c.name} for your ${chosen.name} slot?` : `Take ${c.name} for your ${chosen.name} slot (${chosen.hint.toLowerCase()})?`;
     if (!window.confirm(`${what}\n\nThis can't be undone.`)) return;
-    run(() => (mode === "opening" ? openingPickAction(seasonId, chosen.index, c.id) : replacementAction(seasonId, chosen.index, c.id)));
+    run(() => (onPick ? onPick(chosen.index, c.id) : mode === "opening" ? openingPickAction(seasonId, chosen.index, c.id) : replacementAction(seasonId, chosen.index, c.id)));
   };
 
   if (!chosen) return <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Nothing left to fill.</p>;

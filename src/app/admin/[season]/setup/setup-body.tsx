@@ -19,7 +19,6 @@ import {
   removeTeamAction,
   renameTeamAction,
   removeTribeAction,
-  saveRosterAction,
   saveSeedAction,
   updateBasicsAction,
   updateEpisodeAction,
@@ -82,7 +81,7 @@ export async function SetupBody({ season }: { season: Season }) {
                   <Field label="League timezone" hint="IANA name, for example America/Los_Angeles. Used to show dates and times."><input name="timezone" defaultValue={season.config.timezone} required className={inputCls} /></Field>
                   <Field label="Ownership cap" hint="Most teams that may own the same castaway."><input name="ownershipCap" type="number" min={1} defaultValue={season.config.ownershipCap} required className={inputCls} /></Field>
                   <Field label="Swap credits per team" hint="Leave blank for no limit."><input name="swapCreditLimit" type="number" min={0} defaultValue={season.config.swapCreditLimit ?? ""} className={inputCls} /></Field>
-                  <Field label="Rule that marks the season winner" hint="Used to settle the final wager."><select name="winnerRule" defaultValue={season.config.wager.winnerRule} className={inputCls}>{season.rules.filter((r) => !r.retired).map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}</select></Field>
+                  <Field label="Rule that marks the season winner" hint="Only used to settle the final wager (each member secretly bets points on who wins, at the start of the season) — it has no effect on anything else."><select name="winnerRule" defaultValue={season.config.wager.winnerRule} className={inputCls}>{season.rules.filter((r) => !r.retired && r.inputType === "boolean").map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}</select></Field>
                   <fieldset className="sm:col-span-2">
                     <legend className="mb-1 text-sm font-semibold">Replacements that cost no swap credit</legend>
                     <div className="flex flex-wrap gap-4 text-sm">
@@ -177,7 +176,7 @@ export async function SetupBody({ season }: { season: Season }) {
                 {season.castaways.map((c) => (
                   <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-1 text-sm">
                     {editable ? (
-                      <ActionForm action={updateCastawayAction} submit="Save" ghost className="flex flex-1 flex-wrap items-center gap-2">
+                      <ActionForm key={`${c.name}:${c.initialTribeId}`} action={updateCastawayAction} submit="Save" ghost className="flex flex-1 flex-wrap items-center gap-2">
                         <Hidden season={season} /><input type="hidden" name="castawayId" value={c.id} />
                         <input name="name" defaultValue={c.name} required className={`${inputCls} w-32 px-2 py-1`} />
                         <select name="tribe" defaultValue={c.initialTribeId} className={`${inputCls} px-2 py-1`}>{season.tribes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
@@ -259,40 +258,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         <section>
-          <SectionTitle>4 · Opening rosters</SectionTitle>
-          <p className="-mt-1 mb-3 text-sm text-muted">Entered by the commissioner for now. Member self-service picking arrives in a later phase; this entry is logged with a reason.</p>
-          {season.teams.length === 0 ? (
-            <p className="text-sm text-muted">Add teams first.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {season.teams.map((t) => (
-                <Card key={t.id} className="p-4">
-                  <p className="mb-2 font-semibold">{t.member}</p>
-                  {editable ? (
-                    <ActionForm action={saveRosterAction} submit="Save roster">
-                      <Hidden season={season} /><input type="hidden" name="teamId" value={t.id} />
-                      {season.slots.map((sl, i) => (
-                        <Field key={sl.id} label={sl.name}>
-                          <select name={`slot_${i}`} defaultValue={t.draft[i] ?? ""} className={inputCls}>
-                            <option value="">— not picked —</option>
-                            {season.castaways.filter((c) => !sl.restrictionTribeId || c.initialTribeId === sl.restrictionTribeId).map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}{sl.restrictionTribeId ? "" : ` (${tribeName(c.initialTribeId)})`}</option>
-                            ))}
-                          </select>
-                        </Field>
-                      ))}
-                    </ActionForm>
-                  ) : (
-                    <p className="text-sm text-muted">{t.draft.map((c) => season.castaways.find((x) => x.id === c)?.name ?? "—").join(" · ")}</p>
-                  )}
-                </Card>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section>
-          <SectionTitle>5 · Episodes</SectionTitle>
+          <SectionTitle>4 · Episodes</SectionTitle>
           <Card className="grid gap-4 p-4">
             <Issues issues={issues} section="episodes" />
             {season.status !== "ARCHIVED" ? (
@@ -352,7 +318,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         <section>
-          <SectionTitle>6 · Scoring rules</SectionTitle>
+          <SectionTitle>5 · Scoring rules</SectionTitle>
           <p className="-mt-1 mb-3 text-sm text-muted">The scoring template. Each rule has a value for each phase (blank where it doesn't apply). Changes apply to episodes scored from now on; published scores keep the points they resolved to.</p>
           <Issues issues={issues} section="scoring" />
 

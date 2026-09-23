@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn } from "@/domain/picks";
 import { correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
-import { activateSeason, createSeason, finalizeSeason, renameTeam, rosterProblem, slug, updateCastaway, validTimezone } from "@/domain/setup";
+import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
 import { addRule, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
 import { lockWagers, openWagers, wagerProblem } from "@/domain/wager";
@@ -165,13 +165,6 @@ export async function deleteSeasonAction(_: ActionState, fd: FormData): Promise<
   redirect("/admin");
 }
 
-export async function activateSeasonAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
-    const r = activateSeason(s, ctx.actor);
-    return { ...r, message: "Season activated. Episodes can now be scored." };
-  });
-}
-
 /** Finalizing is the reveal: it is the one place every secret wager is read, and the results are written into the season. */
 export async function finalizeSeasonAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const seasonId = str(fd, "seasonId");
@@ -211,7 +204,7 @@ export async function updateBasicsAction(_: ActionState, fd: FormData) {
     s.config.openingRoundMode = "SNAKE"; // the league drafts one pick at a time, reversing the order each round
     const winnerRule = str(fd, "winnerRule");
     if (winnerRule) {
-      if (!s.rules.some((r) => r.key === winnerRule && !r.retired)) throw new Error("Choose a scoring rule that is in use as the winner rule.");
+      if (!s.rules.some((r) => r.key === winnerRule && !r.retired && r.inputType === "boolean")) throw new Error("Choose an on/off rule (like Sole Survivor) to mark the season winner.");
       s.config.wager.winnerRule = winnerRule;
     }
     s.config.freeReplacementStatuses = statusTypes.filter((t) => fd.get(`free_${t}`) === "on");
@@ -353,24 +346,6 @@ export async function saveSeedAction(_: ActionState, fd: FormData) {
   });
 }
 
-export async function saveRosterAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
-    needSetup(s);
-    const team = s.teams.find((t) => t.id === str(fd, "teamId"));
-    if (!team) throw new Error("Unknown team.");
-    const ids = s.slots.map((_, i) => str(fd, `slot_${i}`));
-    const problem = rosterProblem(s, team.id, ids, { allowEmpty: true });
-    if (problem) throw new Error(problem);
-    const before = team.draft;
-    team.draft = ids;
-    return {
-      season: s,
-      audit: [change(s, ctx.actor, "roster", team.id, "SET_OPENING_ROSTER", before, ids, "Commissioner entry")],
-      message: `${team.member}'s opening roster saved.`,
-    };
-  });
-}
-
 // ---------- setup: episodes and scoring values ----------
 
 const phases: Phase[] = ["pre-merge", "post-merge", "finale"];
@@ -503,22 +478,28 @@ export async function editScoringAction(seasonId: string, episode: number, rows:
 
 // ---------- opening selection & pick windows ----------
 
-export async function openOpeningSelectionAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
-    const r = openOpeningSelection(s, ctx.actor);
-    return { ...r, message: "Opening selection is open. Teams pick in the saved order." };
+/** Launches the draft: teams and pick order lock in, and the commissioner lands on the draft board to run it. */
+export async function openOpeningSelectionAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const seasonId = str(fd, "seasonId");
+  const r = await mutate(seasonId, (s, _at, ctx) => {
+    const res = openOpeningSelection(s, ctx.actor);
+    return { ...res, message: "The draft is open." };
   });
+  if (r.error) return r;
+  redirect(`/admin/${seasonId}/draft`);
 }
 
-/** The commissioner picks for the team on turn (for example when someone cannot get to the site). A reason is required. */
-export async function adminOpeningPickAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, at, ctx) => {
+/**
+ * The commissioner makes every opening-draft pick from the draft board, live off whatever order they set —
+ * no reason needed, since this is the ordinary way the whole opening draft is entered, not an occasional
+ * stand-in for someone who can't get to the site.
+ */
+export async function adminOpeningPickAction(seasonId: string, teamId: string, slot: number, castaway: string): Promise<ActionState> {
+  return mutate(seasonId, (s, at, ctx) => {
     const turn = openingTurn(s);
-    if (!turn) throw new Error("Opening selection is not open.");
-    const reason = str(fd, "reason");
-    if (!reason) throw new Error("Give a reason for picking on the team's behalf.");
-    const r = makeOpeningPick(s, turn.teamId, Number(str(fd, "slot")), str(fd, "castaway"), ctx.actor, at, reason);
-    return { ...r, message: "Pick recorded for the team." };
+    if (!turn || turn.teamId !== teamId) throw new Error("It isn't this team's turn to pick.");
+    const r = makeOpeningPick(s, teamId, intOf(slot), String(castaway), ctx.actor, at);
+    return { ...r, message: "Pick recorded." };
   });
 }
 

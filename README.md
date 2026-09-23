@@ -27,7 +27,7 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 | `src/domain/wager.ts` | Final wager: eligibility, stake limits, open/lock, winner lookup, 1:1 settlement. |
 | `src/domain/picks.ts` | Opening draft (FIXED/SNAKE), weekly windows with a frozen reverse-standings queue, multi-pick turns, pass/skip/close, the server-side legality check for every pick. |
 | `src/server` | Versioned SQLite/Turso store (compare-and-swap + audit rows), session auth, guarded server actions. |
-| `src/app` | Public: Leaderboard (`/`), This Week, Teams, Castaways, Episodes, Rules, Archive. Members: `/<season>/sign-in` then `/<season>/my`. Commissioner: `/admin` (setup, members, score, corrections, audit). |
+| `src/app` | Public: Leaderboard (`/`), This Week, Teams, Castaways, Episodes, Rules, Archive. Members: `/<season>/sign-in` then `/<season>/my`. Commissioner: `/admin` (setup, members, score, corrections, audit, and the live draft board at `/admin/<season>/draft`). |
 
 ## Assumptions to confirm (recorded in the season config, none hard-coded in the engine)
 
@@ -91,7 +91,9 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 
 ## Draft workflow and team names
 
-- **Publishing the draft is now decoupled from the rest of setup.** "Publish teams & pick order" only needs the cast, tribes, slots, teams and pick order — not episodes or scoring values, which a league often finalizes closer to air date. Once published, teams and the order lock in and each member drafts from their own link; episodes/scoring stay editable in Setup the whole time, before, during or after the draft. The old "enter every roster yourself" path is still there as a secondary option, now behind a details toggle, and it still needs everything (since it skips the draft and goes straight to active).
+- **Setup defines everything except opening rosters.** There's no more direct "type in every team's roster" path — the only way rosters get filled is the draft. "Launch to draft phase" needs the cast, tribes, slots, teams and pick order — not episodes or scoring values, which a league often finalizes closer to air date. Launching locks in teams and the pick order and sends the commissioner straight to the draft board.
+- **Opening pick order is always typed in by the commissioner** (Setup → Teams) — there's no in-app random draw. A league that wants a random order runs it themselves (a wheel, a drawn-names video call, whatever) and types the result in.
+- **The draft board** (`/admin/<season>/draft`) is a dedicated, commissioner-run screen designed to be shared on a call: a large "who's up" banner, a searchable click-to-pick list (`PickPanel`, the same component members use for their own turn, given an `onPick` that targets `adminOpeningPickAction` instead), and a live table of every team's roster filling in below. No reason field — entering the whole opening draft this way is the ordinary path now, not an occasional stand-in for a member who can't get to the site. When the last slot is filled the board itself announces "Draft complete!".
 - **Team names are filler until someone sets them.** A new team still defaults to "Member's Team"; from there, either the commissioner (Setup → Teams) or the member themselves (My Team → Team name) can rename it, any time before the season is archived — deliberately not gated to setup, since some people like to wait.
 
 ## Member sign-in, and deleting a season
