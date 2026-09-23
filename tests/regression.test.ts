@@ -83,7 +83,13 @@ test("pick queue is lowest total first with a deterministic tie rule", () => {
   for (const w of [1, 5, 8, 11]) {
     const q = buildPickQueue(season, w);
     assert.equal(q.length, 14);
-    for (let i = 1; i < q.length; i++) assert.ok(q[i - 1].pointsAtOpen <= q[i].pointsAtOpen, `window ${w} position ${i}`);
+    // Teams that lost a castaway this episode come first; within each group, lowest points first.
+    const lost = (id: string) => effectiveRoster(season, id, w).some((c) => c && isActiveAt(season, c, w) && !isActiveAt(season, c, w + 1));
+    for (let i = 1; i < q.length; i++) {
+      const a = q[i - 1], b = q[i];
+      if (lost(a.teamId) === lost(b.teamId)) assert.ok(a.pointsAtOpen <= b.pointsAtOpen, `window ${w} position ${i}`);
+      else assert.ok(lost(a.teamId), `window ${w} position ${i}: losers first`);
+    }
     assert.deepEqual(new Set(q.map((e) => e.sequence)).size, 14);
   }
 });

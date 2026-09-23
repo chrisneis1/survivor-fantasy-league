@@ -54,7 +54,7 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 - **Reminders are a mail-to button, and optional.** Where a team is up, the commissioner sees "Email a reminder", which opens their own email app with the message written. The site sends no email and stores no addresses.
 - **Members sign in with a username and password.** The commissioner sets one per team (Members page) and can email it with the same mail-to approach. Only a hash of the password is stored; changing it revokes the old one and any device signed in with it. The cookie is per season and lasts about six months. (See "Member sign-in, and deleting a season" below — this replaced an earlier personal-invite-link design.)
 - **Every pick is re-validated on the server** (turn, slot, tribe restriction, duplicate, ownership cap, swap credits or free entitlement, eliminated castaway) and saved with a version check. A member who loses a race for the last ownership slot is retried against fresh state and told the real reason.
-- **The queue is frozen** when a window opens (lowest points first; ties: later opening seed first) and does not move if a score is corrected. Teams with no legal pick are auto-skipped with the reason shown.
+- **The queue is frozen** when a window opens (teams that lost a castaway in the latest episode pick first, then teams still holding open slots from earlier skips; each group lowest points first, ties: later opening seed first) and does not move if a score is corrected. Teams with no legal pick are auto-skipped with the reason shown.
 - New seasons can either use the draft (Members pick) or the commissioner-entry path from phase 3.
 
 ## Phase 5: the final wager

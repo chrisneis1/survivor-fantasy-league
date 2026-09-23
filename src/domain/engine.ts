@@ -222,7 +222,13 @@ export function buildPickQueue(season: Season, afterEpisode: number): QueueEntry
     return i;
   };
   const effectiveAt = afterEpisode + 1;
+  // Teams that lost a castaway in this very episode pick first; teams whose open slots are left over from earlier
+  // skipped windows come after them. Within each group, lowest points act first.
+  const lostNow = (teamId: string) =>
+    effectiveRoster(season, teamId, afterEpisode).some((c) => c && isActiveAt(season, c, afterEpisode) && !isActiveAt(season, c, effectiveAt));
   const ordered = [...rows].sort((a, b) => {
+    const la = lostNow(a.teamId), lb = lostNow(b.teamId);
+    if (la !== lb) return la ? -1 : 1;
     if (a.total !== b.total) return a.total - b.total;
     // OPENING_SEED_REVERSE: the later opening seed acts first, mirroring the catch-up principle.
     return seedPos(b.teamId) - seedPos(a.teamId);
