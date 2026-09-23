@@ -68,6 +68,8 @@ export function openingBlock(season: Season, teamId: string, slot: number, casta
   if (!team) return "Unknown team.";
   if (!season.slots[slot]) return "Unknown slot.";
   if (team.draft[slot]) return "That slot is already filled.";
+  // A castaway already out of the game (e.g. voted out in a premiere scored before the draft) can't be drafted.
+  if (!isActiveAt(season, castawayId, latestPublished(season) + 1)) return "Eliminated";
   const ids = [...team.draft];
   ids[slot] = castawayId;
   return rosterProblem(season, teamId, ids, { allowEmpty: true });

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import survivor50 from "../src/data/seasons/survivor-50.json";
 import type { Season } from "../src/domain/types";
 import { standings, teamEpisodeScore } from "../src/domain/engine";
-import { makeOpeningPick, openOpeningSelection, openingTurn } from "../src/domain/picks";
+import { makeOpeningPick, openOpeningSelection, openingBlock, openingTurn } from "../src/domain/picks";
 import { publishEpisode, saveDraft, validatePublish } from "../src/domain/scoring";
 import { createSeason } from "../src/domain/setup";
 
@@ -37,6 +37,16 @@ test("an excluded episode publishes with no team having any roster yet, while th
   assert.equal(teamEpisodeScore(scored, "x", 1), 0);
   assert.equal(teamEpisodeScore(scored, "y", 1), 0);
   assert.equal(standings(scored, 1)[0].total, 0);
+});
+
+test("someone voted out in the premiere can't be drafted afterward", () => {
+  let s = season();
+  s = saveDraft(s, { episode: 1, rows: [{ castaway: "a1", inputs: {}, exit: { type: "VOTED_OUT" } }] }, at);
+  s = publishEpisode(s, 1, "t").season;
+  s = openOpeningSelection(s, "t").season;
+  assert.equal(openingBlock(s, "x", 0, "a1"), "Eliminated");
+  assert.equal(openingBlock(s, "x", 0, "a2"), null, "everyone still in the game is pickable");
+  assert.throws(() => makeOpeningPick(s, "x", 0, "a1", "m", at), /Eliminated/);
 });
 
 test("a normal (non-excluded) episode still refuses to publish before the season is active", () => {
