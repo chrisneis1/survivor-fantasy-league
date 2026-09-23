@@ -75,7 +75,8 @@ test("deleting a season removes it and everything scoped to it, and leaves other
   const gone: Season = { ...ref, id: "gone", name: "Gone Season", status: "SETUP" };
   await store.create(gone);
   await store.setCommissioner("gone", "shane", true);
-  await store.setCredential("gone", "shane", "shane", "hash");
+  const userId = await store.createUser("shane-in-gone", "hash");
+  await store.assignUser("gone", "shane", userId);
   await store.logAudit([{ seasonId: "gone", actor: "t", entityType: "season", entityId: "gone", action: "SOMETHING" }]);
 
   await store.deleteSeason("gone");
@@ -83,33 +84,51 @@ test("deleting a season removes it and everything scoped to it, and leaves other
   assert.equal(await store.get("gone"), null);
   assert.equal((await store.list()).length, 1, "survivor-50 (the seed) is untouched");
   assert.deepEqual(await store.commissioners("gone"), new Set());
-  assert.equal(await store.checkCredential("gone", "shane", () => true), null);
+  assert.equal(await store.teamForUser("gone", userId), null);
   assert.deepEqual(await store.audit("gone"), []);
   assert.equal((await store.get("survivor-50"))!.season.name, ref.name, "an unrelated season is unaffected");
 });
 
-test("member logins: only the password hash is stored, changing a login revokes the old session, wrong password finds nothing", async () => {
-  const store = fresh("credentials");
+test("user accounts: only the password hash is stored, changing the password revokes the old session, wrong password finds nothing", async () => {
+  const store = fresh("accounts");
   const verifyAs = (expected: string) => (hash: string) => hash === expected;
-  await store.setCredential("survivor-50", "shane", "shane", "hash-v1");
-  const found = await store.checkCredential("survivor-50", "shane", verifyAs("hash-v1"));
-  assert.deepEqual(found, { teamId: "shane", key: found!.key });
-  assert.equal(await store.credentialKey("survivor-50", "shane"), found!.key);
-  assert.equal(await store.checkCredential("survivor-50", "shane", verifyAs("wrong-hash")), null, "a wrong password matches nothing");
-  assert.equal(await store.checkCredential("survivor-50", "nobody", verifyAs("hash-v1")), null, "an unknown username matches nothing");
+  const userId = await store.createUser("shane", "hash-v1");
+  const found = await store.checkUserLogin("shane", verifyAs("hash-v1"));
+  assert.deepEqual(found, { userId, isAdmin: false, key: found!.key });
+  assert.equal((await store.userById(userId))!.key, found!.key);
+  assert.equal(await store.checkUserLogin("shane", verifyAs("wrong-hash")), null, "a wrong password matches nothing");
+  assert.equal(await store.checkUserLogin("nobody", verifyAs("hash-v1")), null, "an unknown username matches nothing");
 
-  const raw = createClient({ url: `file:${join(dir, "credentials.db")}` });
-  const { rows } = await raw.execute("SELECT password_hash FROM member_credential");
+  const raw = createClient({ url: `file:${join(dir, "accounts.db")}` });
+  const { rows } = await raw.execute("SELECT password_hash FROM app_user");
   assert.equal(rows[0].password_hash, "hash-v1", "the hash is stored, never the plain password");
   raw.close();
 
-  await store.setCredential("survivor-50", "shane", "shane", "hash-v2");
-  assert.notEqual(await store.credentialKey("survivor-50", "shane"), found!.key, "changing the login revokes sessions made with the old one");
-  assert.equal(await store.checkCredential("survivor-50", "shane", verifyAs("hash-v1")), null, "the old password no longer works");
+  await assert.rejects(store.createUser("shane", "hash-x"), /already taken/, "usernames are unique site-wide");
+  await store.setUserAdmin(userId, true);
+  assert.equal((await store.checkUserLogin("shane", verifyAs("hash-v1")))!.isAdmin, true);
+  assert.deepEqual((await store.listUsers()).map((u) => u.username), ["shane"]);
+});
 
-  await store.setCredential("survivor-50", "gabby", "gabby", "hash-g");
-  await assert.rejects(store.setCredential("survivor-50", "cori", "gabby", "hash-c"), /already taken/, "usernames are unique within a season");
-  assert.deepEqual([...(await store.credentials("survivor-50")).entries()].sort(), [["gabby", "gabby"], ["shane", "shane"]]);
+test("season membership: a user runs at most one team per season, and a team holds at most one user", async () => {
+  const store = fresh("membership");
+  const shane = await store.createUser("shane", "h1");
+  const cori = await store.createUser("cori", "h2");
+  await store.assignUser("survivor-50", "shane", shane);
+  assert.equal(await store.teamForUser("survivor-50", shane), "shane");
+
+  // Assigning shane to a second team in the same season moves him off the first.
+  await store.assignUser("survivor-50", "cori", shane);
+  assert.equal(await store.teamForUser("survivor-50", shane), "cori");
+  assert.equal((await store.membersOf("survivor-50")).has("shane"), false);
+
+  // Assigning cori (a different user) onto the team shane now holds bumps him off entirely.
+  await store.assignUser("survivor-50", "cori", cori);
+  assert.equal(await store.teamForUser("survivor-50", shane), null);
+  assert.deepEqual((await store.membersOf("survivor-50")).get("cori"), { userId: cori, username: "cori" });
+
+  await store.unassignUser("survivor-50", "cori");
+  assert.equal(await store.teamForUser("survivor-50", cori), null);
 });
 
 test("the commissioner role is per season, off by default, and toggles cleanly", async () => {

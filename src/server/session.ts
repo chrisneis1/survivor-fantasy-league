@@ -67,33 +67,32 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(actual, expected);
 }
 
-// ---------- member sessions ----------
-// A member signs in with a username and password set for their team, and gets a long-lived cookie naming their team.
-// `k` is a per-credential key that changes whenever the commissioner sets a new username/password, so changing
-// someone's login revokes every session made with the old one.
+// ---------- user sessions ----------
+// One site-wide account, one cookie, independent of any season — which season(s) and team(s) it can act for is
+// looked up separately (season_membership). `k` is the account's own session key, which changes whenever the
+// password changes, so changing a password revokes every session signed in with the old one.
 
-export const MEMBER_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+export const USER_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
-export interface MemberSession {
-  season: string;
-  team: string;
+export interface UserSession {
+  userId: string;
   k: string;
 }
 
-export function signMember(secret: string, m: MemberSession, now = Date.now()): string {
-  const body = b64(JSON.stringify({ role: "member", ...m, exp: now + MEMBER_TTL_MS }));
+export function signUserSession(secret: string, u: UserSession, now = Date.now()): string {
+  const body = b64(JSON.stringify({ role: "user", ...u, exp: now + USER_TTL_MS }));
   return `${body}.${mac(secret, body)}`;
 }
 
-export function verifyMember(secret: string, token: string | undefined, now = Date.now()): MemberSession | null {
+export function verifyUserSession(secret: string, token: string | undefined, now = Date.now()): UserSession | null {
   if (!token) return null;
   const [body, sig, extra] = token.split(".");
   if (!body || !sig || extra !== undefined || !safeEqual(sig, mac(secret, body))) return null;
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString());
-    if (p.role !== "member" || typeof p.exp !== "number" || p.exp <= now) return null;
-    if (typeof p.season !== "string" || typeof p.team !== "string" || typeof p.k !== "string") return null;
-    return { season: p.season, team: p.team, k: p.k };
+    if (p.role !== "user" || typeof p.exp !== "number" || p.exp <= now) return null;
+    if (typeof p.userId !== "string" || typeof p.k !== "string") return null;
+    return { userId: p.userId, k: p.k };
   } catch {
     return null;
   }

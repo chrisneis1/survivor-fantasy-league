@@ -2,7 +2,7 @@ import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
 import { Card, PageTitle, Pill, SectionTitle } from "@/components/ui";
 import { optionsToText, ruleUsed, rulePhases, layoutOf } from "@/domain/template";
-import { validateSetup, type SetupIssue } from "@/domain/setup";
+import { slug, validateSetup, type SetupIssue } from "@/domain/setup";
 import type { Season } from "@/domain/types";
 import { store } from "@/server";
 import { getAccess } from "@/server/auth";
@@ -10,7 +10,7 @@ import {
   addCastawayAction,
   addEpisodeAction,
   addSlotAction,
-  addTeamAction,
+  addTeamFromUserAction,
   addTribeAction,
   removeCastawayAction,
   updateCastawayAction,
@@ -59,6 +59,9 @@ export async function SetupBody({ season }: { season: Season }) {
   const layout = layoutOf(season);
   const categories = [...new Set(season.rules.map((r) => r.category))];
   const access = await getAccess(season.id);
+  const allUsers = await store().listUsers();
+  const inSeason = new Set(season.teams.map((t) => t.id));
+  const availableUsers = allUsers.filter((u) => !inSeason.has(slug(u.username)));
 
   return (
     <>
@@ -231,13 +234,26 @@ export async function SetupBody({ season }: { season: Season }) {
               ))}
             </ul>
             {editable ? (
-              <ActionForm action={addTeamAction} submit="Add team" ghost resetOnSuccess>
-                <Hidden season={season} />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Member"><input name="member" required className={inputCls} /></Field>
-                  <Field label="Team name" hint="Optional."><input name="teamName" className={inputCls} /></Field>
+              availableUsers.length === 0 ? (
+                <p className="text-sm text-muted">
+                  {allUsers.length === 0 ? "Nobody has signed up yet." : "Everyone who's signed up is already in this season."} Tell people to create an account at{" "}
+                  <span className="text-ink">/signup</span> — they&apos;ll show up here to add.
+                </p>
+              ) : (
+                <div>
+                  <h3 className="mb-2 font-semibold">Who&apos;s playing?</h3>
+                  <p className="-mt-1 mb-3 text-sm text-muted">Pick from everyone who has signed up. Adding someone creates their team and signs them in as it, in one step.</p>
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {availableUsers.map((u) => (
+                      <li key={u.id}>
+                        <ActionForm action={addTeamFromUserAction} submit={`Add ${u.username}`} ghost className="contents">
+                          <Hidden season={season} /><input type="hidden" name="userId" value={u.id} />
+                        </ActionForm>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </ActionForm>
+              )
             ) : null}
             {editable && season.teams.length > 0 ? (
               <ActionForm action={saveSeedAction} submit="Save opening order">

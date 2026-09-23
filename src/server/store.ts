@@ -48,12 +48,16 @@ export function createStore(client: Client, seed: Season[] = []) {
         `CREATE TABLE IF NOT EXISTS wager_entry (
            season_id TEXT NOT NULL, team_id TEXT NOT NULL, castaway_id TEXT NOT NULL, stake INTEGER NOT NULL, updated_at TEXT NOT NULL,
            PRIMARY KEY (season_id, team_id))`,
-        // A team's sign-in: set and edited by the commissioner from Members. Only a scrypt hash of the password is
-        // stored; `session_key` changes on every save, so saving a new username/password revokes any signed-in device.
-        `CREATE TABLE IF NOT EXISTS member_credential (
-           season_id TEXT NOT NULL, team_id TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL,
-           session_key TEXT NOT NULL, updated_at TEXT NOT NULL,
-           PRIMARY KEY (season_id, team_id), UNIQUE (season_id, username))`,
+        // A site-wide account: signs up once, independent of any season. Only a scrypt hash of the password is
+        // stored; `session_key` changes whenever the password changes, revoking any signed-in device.
+        `CREATE TABLE IF NOT EXISTS app_user (
+           id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0,
+           session_key TEXT NOT NULL, created_at TEXT NOT NULL)`,
+        // Which user currently occupies which team, in which season — set by the commissioner from Members. A user
+        // holds at most one team per season; a team holds at most one user.
+        `CREATE TABLE IF NOT EXISTS season_membership (
+           season_id TEXT NOT NULL, team_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
+           PRIMARY KEY (season_id, team_id), UNIQUE (season_id, user_id))`,
       ],
       "write",
     );
@@ -94,7 +98,7 @@ export function createStore(client: Client, seed: Season[] = []) {
         for (const [table, col] of [
           ["season_doc", "id"],
           ["audit_event", "season_id"],
-          ["member_credential", "season_id"],
+          ["season_membership", "season_id"],
           ["member_role", "season_id"],
           ["wager_entry", "season_id"],
         ] as const) {
@@ -190,45 +194,98 @@ export function createStore(client: Client, seed: Season[] = []) {
       await client.execute({ sql: "DELETE FROM scoring_template WHERE id = ?", args: [id] });
     },
 
-    /**
-     * Sets or changes a team's sign-in. Replaces (and so signs out) any earlier login for this team. Throws if the
-     * username is already taken by another team in the season.
-     */
-    async setCredential(seasonId: string, teamId: string, username: string, passwordHash: string): Promise<void> {
+    // ---------- site-wide user accounts ----------
+
+    /** Self-serve sign-up. Throws if the username is already taken. Returns the new user's id. */
+    async createUser(username: string, passwordHash: string): Promise<string> {
       await ensure();
+      const id = randomBytes(9).toString("base64url");
       const sessionKey = randomBytes(12).toString("base64url");
       try {
         await client.execute({
-          sql: "INSERT INTO member_credential (season_id, team_id, username, password_hash, session_key, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (season_id, team_id) DO UPDATE SET username = excluded.username, password_hash = excluded.password_hash, session_key = excluded.session_key, updated_at = excluded.updated_at",
-          args: [seasonId, teamId, username, passwordHash, sessionKey, new Date().toISOString()],
+          sql: "INSERT INTO app_user (id, username, password_hash, is_admin, session_key, created_at) VALUES (?, ?, ?, 0, ?, ?)",
+          args: [id, username, passwordHash, sessionKey, new Date().toISOString()],
         });
+        return id;
       } catch (e) {
-        if (/UNIQUE/i.test(String(e))) throw new Error("That username is already taken by another team in this season.");
+        if (/UNIQUE/i.test(String(e))) throw new Error("That username is already taken.");
         throw e;
       }
     },
 
-    /** Checks a sign-in attempt. Returns the team and a session key, or null if the username/password don't match. */
-    async checkCredential(seasonId: string, username: string, verify: (hash: string) => boolean): Promise<{ teamId: string; key: string } | null> {
+    /** Checks a sign-in attempt. Returns the account and a session key, or null if the username/password don't match. */
+    async checkUserLogin(username: string, verify: (hash: string) => boolean): Promise<{ userId: string; isAdmin: boolean; key: string } | null> {
       await ensure();
-      const { rows } = await client.execute({ sql: "SELECT team_id, password_hash, session_key FROM member_credential WHERE season_id = ? AND username = ?", args: [seasonId, username] });
+      const { rows } = await client.execute({ sql: "SELECT id, password_hash, is_admin, session_key FROM app_user WHERE username = ?", args: [username] });
       const row = rows[0];
       if (!row || !verify(String(row.password_hash))) return null;
-      return { teamId: String(row.team_id), key: String(row.session_key) };
+      return { userId: String(row.id), isAdmin: !!Number(row.is_admin), key: String(row.session_key) };
     },
 
-    /** The session key a member's cookie must currently carry, or null if the team has no login set. */
-    async credentialKey(seasonId: string, teamId: string): Promise<string | null> {
+    /** The account behind a signed-in session cookie, or null if the account (or session) no longer exists/matches. */
+    async userById(userId: string): Promise<{ id: string; username: string; isAdmin: boolean; key: string } | null> {
       await ensure();
-      const { rows } = await client.execute({ sql: "SELECT session_key FROM member_credential WHERE season_id = ? AND team_id = ?", args: [seasonId, teamId] });
-      return rows[0] ? String(rows[0].session_key) : null;
+      const { rows } = await client.execute({ sql: "SELECT id, username, is_admin, session_key FROM app_user WHERE id = ?", args: [userId] });
+      const row = rows[0];
+      return row ? { id: String(row.id), username: String(row.username), isAdmin: !!Number(row.is_admin), key: String(row.session_key) } : null;
     },
 
-    /** Every team's current username (never the password), for the Members page. */
-    async credentials(seasonId: string): Promise<Map<string, string>> {
+    /** Every account, for the site admin page and for the commissioner to assign to a team. */
+    async listUsers(): Promise<{ id: string; username: string; isAdmin: boolean }[]> {
       await ensure();
-      const { rows } = await client.execute({ sql: "SELECT team_id, username FROM member_credential WHERE season_id = ?", args: [seasonId] });
-      return new Map(rows.map((r) => [String(r.team_id), String(r.username)]));
+      const { rows } = await client.execute("SELECT id, username, is_admin FROM app_user ORDER BY username");
+      return rows.map((r) => ({ id: String(r.id), username: String(r.username), isAdmin: !!Number(r.is_admin) }));
+    },
+
+    async setUserAdmin(userId: string, on: boolean): Promise<void> {
+      await ensure();
+      await client.execute({ sql: "UPDATE app_user SET is_admin = ? WHERE id = ?", args: [on ? 1 : 0, userId] });
+    },
+
+    // ---------- season membership: which user occupies which team ----------
+
+    /**
+     * Assigns a user to a team for a season, replacing any earlier assignment for that team and freeing up any
+     * other team the same user held in this season (a user runs at most one team per season).
+     */
+    async assignUser(seasonId: string, teamId: string, userId: string): Promise<void> {
+      await ensure();
+      const tx = await begin();
+      try {
+        await tx.execute({ sql: "DELETE FROM season_membership WHERE season_id = ? AND (team_id = ? OR user_id = ?)", args: [seasonId, teamId, userId] });
+        await tx.execute({
+          sql: "INSERT INTO season_membership (season_id, team_id, user_id, created_at) VALUES (?, ?, ?, ?)",
+          args: [seasonId, teamId, userId, new Date().toISOString()],
+        });
+        await tx.commit();
+      } catch (e) {
+        await tx.rollback();
+        throw asConflict(e);
+      } finally {
+        tx.close();
+      }
+    },
+
+    async unassignUser(seasonId: string, teamId: string): Promise<void> {
+      await ensure();
+      await client.execute({ sql: "DELETE FROM season_membership WHERE season_id = ? AND team_id = ?", args: [seasonId, teamId] });
+    },
+
+    /** The team a user occupies in a season, or null. This is what "signed in as a member" means. */
+    async teamForUser(seasonId: string, userId: string): Promise<string | null> {
+      await ensure();
+      const { rows } = await client.execute({ sql: "SELECT team_id FROM season_membership WHERE season_id = ? AND user_id = ?", args: [seasonId, userId] });
+      return rows[0] ? String(rows[0].team_id) : null;
+    },
+
+    /** Every team's current occupant (username), for the Members page. */
+    async membersOf(seasonId: string): Promise<Map<string, { userId: string; username: string }>> {
+      await ensure();
+      const { rows } = await client.execute({
+        sql: "SELECT m.team_id, m.user_id, u.username FROM season_membership m JOIN app_user u ON u.id = m.user_id WHERE m.season_id = ?",
+        args: [seasonId],
+      });
+      return new Map(rows.map((r) => [String(r.team_id), { userId: String(r.user_id), username: String(r.username) }]));
     },
 
     /**

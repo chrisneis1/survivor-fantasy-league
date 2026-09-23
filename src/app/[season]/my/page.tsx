@@ -13,8 +13,8 @@ import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, teamOf } from "@/lib/view";
 import { wagerCandidates } from "@/domain/wager";
 import { store } from "@/server";
-import { placeWagerAction, renameMyTeamAction, signOutMemberAction } from "@/server/actions";
-import { getMember } from "@/server/auth";
+import { placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
+import { getMember, getUser } from "@/server/auth";
 import type { Season } from "@/domain/types";
 
 export const metadata = { title: "My Team" };
@@ -22,13 +22,23 @@ export const metadata = { title: "My Team" };
 export default async function MyTeam({ params }: { params: Promise<{ season: string }> }) {
   const season = await getSeason((await params).season);
   if (!season) notFound();
-  const teamId = await getMember(season.id);
+  const [teamId, user] = await Promise.all([getMember(season.id), getUser()]);
 
   if (!teamId) {
     return (
       <SeasonShell season={season} active="/my">
         <PageTitle eyebrow={season.name} title="My Team">
-          This page is for team owners. <Link href={seasonPath(season.id, "/sign-in")} className="text-accent hover:underline">Sign in</Link> with the username and password your commissioner gave you. If it doesn&apos;t work any more, ask them to set a new one.
+          {user ? (
+            <>This page is for team owners. Your account isn&apos;t assigned to a team in {season.name} yet — ask your commissioner to assign it from Members.</>
+          ) : (
+            <>
+              This page is for team owners.{" "}
+              <Link href={`/login?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className="text-accent hover:underline">Sign in</Link>
+              {" "}or{" "}
+              <Link href={`/signup?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className="text-accent hover:underline">create an account</Link>
+              , then ask your commissioner to assign it to your team.
+            </>
+          )}
         </PageTitle>
       </SeasonShell>
     );
@@ -128,7 +138,7 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
       </div>
 
       <div className="mt-8">
-        <form action={signOutMemberAction.bind(null, season.id)}>
+        <form action={userSignOutAction}>
           <button className={btnGhostCls}>Sign out</button>
         </form>
       </div>

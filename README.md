@@ -27,7 +27,7 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 | `src/domain/wager.ts` | Final wager: eligibility, stake limits, open/lock, winner lookup, 1:1 settlement. |
 | `src/domain/picks.ts` | Opening draft (FIXED/SNAKE), weekly windows with a frozen reverse-standings queue, multi-pick turns, pass/skip/close, the server-side legality check for every pick. |
 | `src/server` | Versioned SQLite/Turso store (compare-and-swap + audit rows), session auth, guarded server actions. |
-| `src/app` | Public: Leaderboard (`/`), This Week, Teams, Castaways, Episodes, Rules, Archive. Members: `/<season>/sign-in` then `/<season>/my`. Commissioner: `/admin` (setup, members, score, corrections, audit, and the live draft board at `/admin/<season>/draft`). |
+| `src/app` | Public: Leaderboard (`/`), This Week, Teams, Castaways, Episodes, Rules, Archive. Accounts: `/login`, `/signup`, then `/<season>/my`. Commissioner: `/admin` (setup, members, score, corrections, audit, site accounts at `/admin/users`, and the live draft board at `/admin/<season>/draft`). |
 
 ## Assumptions to confirm (recorded in the season config, none hard-coded in the engine)
 
@@ -96,15 +96,28 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 - **The draft board** (`/admin/<season>/draft`) is a dedicated, commissioner-run screen designed to be shared on a call: a large "who's up" banner, a searchable click-to-pick list (`PickPanel`, the same component members use for their own turn, given an `onPick` that targets `adminOpeningPickAction` instead), and a live table of every team's roster filling in below. No reason field — entering the whole opening draft this way is the ordinary path now, not an occasional stand-in for a member who can't get to the site. When the last slot is filled the board itself announces "Draft complete!".
 - **Team names are filler until someone sets them.** A new team still defaults to "Member's Team"; from there, either the commissioner (Setup → Teams) or the member themselves (My Team → Team name) can rename it, any time before the season is archived — deliberately not gated to setup, since some people like to wait.
 
-## Member sign-in, and deleting a season
+## Site-wide accounts, and deleting a season
 
-- **Members sign in with a username and password**, not a personal invite link. The commissioner sets and edits
-  each team's login from Setup → Members; only a scrypt hash of the password is stored, and saving a new one
-  immediately signs out any device using the old one. (Replaces an earlier per-team invite-link design, whose emailed
-  link could resolve to the wrong host depending on how a proxy forwarded request headers — the new flow builds no
-  URL at all, so there's nothing left to get wrong.)
+- **One account per person, independent of any season.** Anyone can sign up at `/signup` (username + password,
+  self-serve); it grants no season access by itself. Only a scrypt hash of the password is stored, in `app_user`,
+  and a per-account `session_key` (rotated whenever the password changes) revokes every signed-in device at once.
+  One cookie (`league_user`) identifies the account everywhere on the site — there's no more per-season sign-in.
+- **A team is created *from* an account, not the other way around.** Setup → Teams shows everyone who has signed up
+  and isn't already in the season; adding someone creates their team and links the two in one step
+  (`addTeamFromUserAction`), instead of the commissioner typing a name and separately assigning a login afterward.
+  `season_membership` (season, team) → user is the link; an account runs at most one team per season, and a team
+  holds at most one account — assigning someone new bumps off whoever was there. Members still has a manual
+  reassign/unassign for corrections after the fact.
+- **Admin is a flag on an account (`isAdmin`), granted by another admin from `/admin/users`** — but the original
+  shared-passcode login (`COMMISSIONER_PASSCODE`) still works too, unchanged, as a permanent bootstrap/emergency way
+  in that can't be locked out by an accounts-table problem.
+- **The landing page (`/`)** sends a signed-in visitor straight to their team (or the current season) instead of
+  showing itself; a visitor with no account gets Sign in / Create an account plus a direct link to browse the
+  current season without one — the site stays public-by-default either way (guide §9.1).
 - **A season can be deleted** from Setup → Danger zone (admin login only), removing the season document, its audit
-  log, member logins, roles and wagers together. It requires typing the season's exact name first; there is no undo.
+  log, memberships, roles and wagers together. It requires typing the season's exact name first; there is no undo.
+  Survivor 50 was created before any of this existed and was deliberately left unmigrated — its teams have no
+  linked accounts, and that's fine, since it's archived and nobody needs to sign in to it any more.
 
 ## An episode that doesn't count, and a cast entered before tribes exist
 

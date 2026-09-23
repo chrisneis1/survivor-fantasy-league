@@ -50,19 +50,19 @@ test("the limiter locks after repeated failures and recovers after the window", 
   assert.equal(l.blocked(2001), false);
 });
 
-import { MEMBER_TTL_MS, signMember, verifyMember } from "../src/server/session";
+import { USER_TTL_MS, signUserSession, verifyUserSession } from "../src/server/session";
 
-test("member sessions verify, expire and reject tampering or a commissioner token", () => {
-  const m = { season: "s", team: "t", k: "abc" };
+test("user sessions verify, expire and reject tampering or a commissioner token", () => {
+  const m = { userId: "u1", k: "abc" };
   const t0 = 5_000_000;
-  const token = signMember(secret, m, t0);
-  assert.deepEqual(verifyMember(secret, token, t0 + 1000), m);
-  assert.equal(verifyMember(secret, token, t0 + MEMBER_TTL_MS + 1), null);
-  assert.equal(verifyMember("x".repeat(40), token, t0 + 1), null);
+  const token = signUserSession(secret, m, t0);
+  assert.deepEqual(verifyUserSession(secret, token, t0 + 1000), m);
+  assert.equal(verifyUserSession(secret, token, t0 + USER_TTL_MS + 1), null);
+  assert.equal(verifyUserSession("x".repeat(40), token, t0 + 1), null);
   const [body, sig] = token.split(".");
-  const forged = Buffer.from(JSON.stringify({ role: "member", season: "s", team: "other", k: "abc", exp: t0 + 9e12 })).toString("base64url");
-  assert.equal(verifyMember(secret, `${forged}.${sig}`, t0 + 1), null);
-  assert.equal(verifyMember(secret, `${body}.${sig}.x`, t0 + 1), null);
-  assert.equal(verifyMember(secret, signSession(secret, t0), t0 + 1), null, "a commissioner token is not a member session");
-  assert.equal(verifySession(secret, token, t0 + 1), false, "a member session is not a commissioner session");
+  const forged = Buffer.from(JSON.stringify({ role: "user", userId: "other", k: "abc", exp: t0 + 9e12 })).toString("base64url");
+  assert.equal(verifyUserSession(secret, `${forged}.${sig}`, t0 + 1), null);
+  assert.equal(verifyUserSession(secret, `${body}.${sig}.x`, t0 + 1), null);
+  assert.equal(verifyUserSession(secret, signSession(secret, t0), t0 + 1), null, "a commissioner token is not a user session");
+  assert.equal(verifySession(secret, token, t0 + 1), false, "a user session is not a commissioner session");
 });

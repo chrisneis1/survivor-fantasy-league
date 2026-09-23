@@ -18,7 +18,8 @@ export default async function AdminHome() {
   return (
     <AdminShell>
       <PageTitle eyebrow="Commissioner" title="Seasons">
-        Set up a season, score episodes and publish them. Nothing you save here reaches the public standings until you publish an episode.
+        Set up a season, score episodes and publish them. Nothing you save here reaches the public standings until you publish an episode.{" "}
+        <Link href="/admin/users" className="text-accent hover:underline">Site accounts →</Link>
       </PageTitle>
       <ul className="grid gap-3">
         {seasons.map((s) => (

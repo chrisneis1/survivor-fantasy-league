@@ -9,17 +9,13 @@ import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTi
 import { addRule, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
 import { lockWagers, openWagers, wagerProblem } from "@/domain/wager";
-import { type Access, getMember, requireAccess, requireAdmin, signIn, signInMember, signOut, signOutMember } from "./auth";
-import { hashPassword } from "./session";
+import { type Access, getMember, requireAccess, requireAdmin, signIn, signInUser, signOut, signOutUser, signUp } from "./auth";
 import { store } from "./index";
 import { ConflictError } from "./store";
 
 export interface ActionState {
   ok?: string;
   error?: string;
-  /** A username/password just set for a team, shown once so the commissioner can pass it along. */
-  credential?: { username: string; password: string };
-  mailto?: string;
 }
 
 interface Mutation {
@@ -95,11 +91,6 @@ export async function signInAction(_: ActionState, fd: FormData): Promise<Action
 
 export async function signOutAction() {
   await signOut();
-  redirect("/");
-}
-
-export async function signOutMemberAction(seasonId: string) {
-  await signOutMember(seasonId);
   redirect("/");
 }
 
@@ -301,28 +292,39 @@ export async function removeCastawayAction(_: ActionState, fd: FormData) {
 
 // ---------- setup: teams, seed, opening rosters ----------
 
-export async function addTeamAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
+/**
+ * Adds a team for a registered account and links the two in the same step — the commissioner picks who's playing
+ * from everyone who has signed up, rather than typing a name and separately assigning an account to it later.
+ */
+export async function addTeamFromUserAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const seasonId = str(fd, "seasonId");
+  const userId = str(fd, "userId");
+  const user = (await store().listUsers()).find((u) => u.id === userId);
+  if (!user) return { error: "Unknown account." };
+  const id = slug(user.username);
+  const r = await mutate(seasonId, (s, _at, ctx) => {
     needSetup(s);
-    const member = str(fd, "member");
-    const name = str(fd, "teamName") || `${member}'s Team`;
-    if (!member) throw new Error("Enter the member's name.");
-    const id = slug(member);
-    if (s.teams.some((t) => t.id === id)) throw new Error("That member already has a team.");
-    s.teams.push({ id, member, name, draft: s.slots.map(() => "") });
+    if (s.teams.some((t) => t.id === id)) throw new Error(`${user.username} is already in this season.`);
+    s.teams.push({ id, member: user.username, name: `${user.username}'s Team`, draft: s.slots.map(() => "") });
     s.config.openingSeed.push(id);
-    return { season: s, audit: [change(s, ctx.actor, "team", id, "ADD", undefined, { member, name })], message: `Added ${member}'s team.` };
+    return { season: s, audit: [change(s, ctx.actor, "team", id, "ADD", undefined, { member: user.username })], message: `Added ${user.username}.` };
   });
+  if (r.error) return r;
+  await store().assignUser(seasonId, id, userId);
+  return r;
 }
 
 export async function removeTeamAction(_: ActionState, fd: FormData) {
-  return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
+  const seasonId = str(fd, "seasonId");
+  const teamId = str(fd, "teamId");
+  const r = await mutate(seasonId, (s, _at, ctx) => {
     needSetup(s);
-    const id = str(fd, "teamId");
-    s.teams = s.teams.filter((t) => t.id !== id);
-    s.config.openingSeed = s.config.openingSeed.filter((t) => t !== id);
-    return { season: s, audit: [change(s, ctx.actor, "team", id, "REMOVE")], message: "Team removed." };
+    s.teams = s.teams.filter((t) => t.id !== teamId);
+    s.config.openingSeed = s.config.openingSeed.filter((t) => t !== teamId);
+    return { season: s, audit: [change(s, ctx.actor, "team", teamId, "REMOVE")], message: "Team removed." };
   });
+  if (!r.error) await store().unassignUser(seasonId, teamId);
+  return r;
 }
 
 /** The commissioner can rename any team, any time before the season is archived — not just during setup. */
@@ -527,35 +529,64 @@ export async function skipTurnAction(_: ActionState, fd: FormData) {
   });
 }
 
-/** Sets or changes a team's sign-in. Only the hash is stored; the password is returned once so it can be passed along. */
-export async function setCredentialAction(_: ActionState, fd: FormData): Promise<ActionState> {
+// ---------- site-wide accounts ----------
+
+/** Self-serve sign-up. Grants no season access by itself — a commissioner assigns the new account to a team. */
+export async function signUpAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const r = await signUp(str(fd, "username"), str(fd, "password"));
+  if (!r.ok) return { error: r.error };
+  redirect(str(fd, "next") || "/");
+}
+
+export async function userSignInAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const r = await signInUser(str(fd, "username"), str(fd, "password"));
+  if (!r.ok) return { error: r.error };
+  redirect(str(fd, "next") || "/");
+}
+
+export async function userSignOutAction() {
+  await signOutUser();
+  redirect("/");
+}
+
+/** Admin-only: flags or unflags a user account as a site admin. */
+export async function setUserAdminAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const userId = str(fd, "userId");
+  const on = str(fd, "on") === "true";
+  await store().setUserAdmin(userId, on);
+  revalidatePath("/", "layout");
+  return { ok: on ? "Granted site admin." : "Site admin removed." };
+}
+
+/** Assigns an existing account to run a team for this season, replacing whoever held it. */
+export async function assignUserAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const seasonId = str(fd, "seasonId");
   const access = await requireAccess(seasonId);
   const teamId = str(fd, "teamId");
   const cur = await store().get(seasonId);
   const team = cur?.season.teams.find((t) => t.id === teamId);
   if (!cur || !team) return { error: "Unknown team." };
-  const username = str(fd, "username").toLowerCase();
-  const password = str(fd, "password");
-  if (!username) return { error: "Give them a username." };
-  if (password.length < 4) return { error: "Passwords need to be at least 4 characters." };
-  try {
-    await store().setCredential(seasonId, teamId, username, hashPassword(password));
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Could not save the login." };
-  }
-  await store().logAudit([change(cur.season, access.actor, "credential", teamId, "SET_CREDENTIAL", undefined, { username }, "Any earlier login for this team stopped working.")]);
-  const subject = `Your sign-in for ${cur.season.name}`;
-  const body = `Hi ${team.member},\n\nHere is your sign-in for ${cur.season.name}. Open the site, click "Sign in" at the top, and enter:\n\nUsername: ${username}\nPassword: ${password}\n\nPlease don't share it: it lets whoever has it make picks for your team.`;
-  return { ok: `Login ready for ${team.member}. Any earlier login for them no longer works.`, credential: { username, password }, mailto: `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}` };
+  const username = str(fd, "username").trim();
+  if (!username) return { error: "Give a username to assign." };
+  const users = await store().listUsers();
+  const user = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
+  if (!user) return { error: `No account named "${username}". Ask them to sign up first.` };
+  await store().assignUser(seasonId, teamId, user.id);
+  await store().logAudit([change(cur.season, access.actor, "membership", teamId, "ASSIGN_USER", undefined, { username: user.username })]);
+  return { ok: `${user.username} now runs ${team.member}'s team.` };
 }
 
-/** A member signs in with the username/password the commissioner set for their team. */
-export async function memberSignInAction(_: ActionState, fd: FormData): Promise<ActionState> {
+export async function unassignUserAction(_: ActionState, fd: FormData): Promise<ActionState> {
   const seasonId = str(fd, "seasonId");
-  const r = await signInMember(seasonId, str(fd, "username"), str(fd, "password"));
-  if (!r.ok) return { error: r.error };
-  redirect(`/${seasonId}/my`);
+  const access = await requireAccess(seasonId);
+  const teamId = str(fd, "teamId");
+  const cur = await store().get(seasonId);
+  const team = cur?.season.teams.find((t) => t.id === teamId);
+  if (!cur || !team) return { error: "Unknown team." };
+  await store().unassignUser(seasonId, teamId);
+  await store().logAudit([change(cur.season, access.actor, "membership", teamId, "UNASSIGN_USER")]);
+  return { ok: `${team.member}'s team is unassigned.` };
 }
 
 // ---------- member picks ----------

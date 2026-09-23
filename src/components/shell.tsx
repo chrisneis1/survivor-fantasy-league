@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { getAccess, getMember } from "@/server/auth";
+import { userSignOutAction } from "@/server/actions";
+import { getAccess, getMember, getUser } from "@/server/auth";
 import type { Season } from "@/domain/types";
 import { seasonPath } from "@/lib/format";
 
@@ -22,7 +23,7 @@ const statusLabel: Record<Season["status"], string> = {
 
 /** Page frame for one season. `active` is the nav path of the current page. */
 export async function SeasonShell({ season, active, children }: { season: Season; active: string; children: ReactNode }) {
-  const [access, member] = await Promise.all([getAccess(season.id), getMember(season.id)]);
+  const [access, member, user] = await Promise.all([getAccess(season.id), getMember(season.id), getUser()]);
   const admin = !!access;
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 pb-16 sm:px-6">
@@ -40,10 +41,18 @@ export async function SeasonShell({ season, active, children }: { season: Season
           <span className="flex items-center gap-4 text-sm font-medium text-muted">
             {admin ? <Link href={`/admin/${season.id}`} className="text-accent hover:underline">Commissioner tools</Link> : null}
             <Link href="/seasons" className="hover:text-ink">Archive</Link>
+            {user ? (
+              <span className="flex items-center gap-2">
+                <span className="hidden sm:inline">{user.username}</span>
+                <form action={userSignOutAction}><button className="hover:text-ink">Sign out</button></form>
+              </span>
+            ) : (
+              <Link href={`/login?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className="hover:text-ink">Sign in</Link>
+            )}
           </span>
         </div>
         <nav aria-label="Sections" className="no-scrollbar -mx-4 mt-2 flex gap-1 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
-          {[...nav, member ? { path: "/my", label: "My Team" } : { path: "/sign-in", label: "Sign in" }].map((n) => (
+          {[...nav, ...(member ? [{ path: "/my", label: "My Team" }] : [])].map((n) => (
             <Link
               key={n.path}
               href={seasonPath(season.id, n.path)}
