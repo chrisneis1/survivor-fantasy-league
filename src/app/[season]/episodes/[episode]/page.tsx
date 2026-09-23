@@ -73,7 +73,7 @@ export default async function EpisodePage({ params }: { params: Promise<{ season
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-2">
         <div>
           <SectionTitle aside="Team scores are derived">Team scores</SectionTitle>
           <Card className="overflow-hidden">

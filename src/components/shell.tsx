@@ -28,17 +28,17 @@ export async function SeasonShell({ season, active, children }: { season: Season
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 pb-16 sm:px-6">
       <header className="sticky top-0 z-20 -mx-4 border-b border-line bg-bg/90 px-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <div className="flex items-center justify-between gap-3">
-          <Link href={seasonPath(season.id)} className="flex items-center gap-2.5" aria-label={`${season.name} leaderboard`}>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <Link href={seasonPath(season.id)} className="flex min-w-0 items-center gap-2.5" aria-label={`${season.name} leaderboard`}>
             <span aria-hidden className="grid size-8 place-items-center rounded-lg bg-accent text-accent-ink">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2c1 3.5 4.5 5 4.5 9.2a4.5 4.5 0 0 1-9 0c0-1.6.7-2.7 1.5-3.7.3 1.2 1 1.9 1.7 2.2C10.3 6.6 11 4 12 2Z" /><path d="M5 20h14v2H5z" /></svg>
             </span>
             <span className="display text-lg font-extrabold leading-none">
               {season.name}
-              <span className="ml-2 align-middle text-[11px] font-semibold uppercase tracking-widest text-muted">{statusLabel[season.status]}</span>
+              <span className="ml-2 hidden align-middle text-[11px] min-[420px]:inline font-semibold uppercase tracking-widest text-muted">{statusLabel[season.status]}</span>
             </span>
           </Link>
-          <span className="flex items-center gap-4 text-sm font-medium text-muted">
+          <span className="flex shrink-0 items-center gap-3 text-sm font-medium text-muted sm:gap-4">
             {admin ? <Link href={`/admin/${season.id}`} className="text-accent hover:underline">Commissioner tools</Link> : null}
             <Link href="/seasons" className="hover:text-ink">Archive</Link>
             {user ? (

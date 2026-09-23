@@ -176,7 +176,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
         </dl>
       </Card>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-2">
         <section>
           <SectionTitle aside="Fewest points picks first">Pick order</SectionTitle>
           <Card className="overflow-hidden">

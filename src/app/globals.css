@@ -52,7 +52,8 @@
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
-html { background: var(--bg); color-scheme: light dark; }
+html { background: var(--bg); color-scheme: light dark; -webkit-text-size-adjust: 100%; }
+body { overflow-x: clip; }
 body {
   background:
     radial-gradient(1200px 500px at 50% -200px, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),

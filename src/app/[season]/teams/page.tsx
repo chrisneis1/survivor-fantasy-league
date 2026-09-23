@@ -19,7 +19,7 @@ export default async function Teams({ params }: { params: Promise<{ season: stri
       <PageTitle eyebrow={season.name} title="Teams">
         Every team&apos;s roster at the end of the season, in slot order. Struck-through castaways are out of the game.
       </PageTitle>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
         {rows.map((r) => {
           const t = teamOf(season, r.teamId);
           const roster = effectiveRoster(season, t.id, last);

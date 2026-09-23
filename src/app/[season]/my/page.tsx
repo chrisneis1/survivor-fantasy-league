@@ -107,7 +107,7 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
       {season.status === "ACTIVE" && season.wagerState !== "OFF" ? <WagerCard season={season} teamId={teamId} /> : null}
 
       <SectionTitle aside={<Link className="hover:text-ink" href={seasonPath(season.id, `/teams/${teamId}`)}>Full team page →</Link>}>Roster</SectionTitle>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
         {season.slots.map((slot, i) => {
           const cid = roster[i];
           const out = cid && !isActiveAt(season, cid, Math.min(effEp, season.episodes.length));

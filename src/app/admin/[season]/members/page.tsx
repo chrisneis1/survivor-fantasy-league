@@ -30,7 +30,7 @@ export default async function Members({ params }: { params: Promise<{ season: st
       {season.teams.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Add teams in Setup first.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
           {season.teams.map((t) => {
             const occupant = members.get(t.id);
             return (
