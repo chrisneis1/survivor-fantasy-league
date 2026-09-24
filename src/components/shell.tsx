@@ -97,6 +97,9 @@ async function AccountControls({ next }: { next: string }) {
       }
     >
       <p className="px-3 pb-2 pt-1 text-xs text-muted">Signed in as <strong className="text-ink">{user.username}</strong>{user.isAdmin ? " · site admin" : ""}</p>
+      <Link href="/account" className={menuItemCls}>
+        <IconMyTeam /> Change password
+      </Link>
       <form action={userSignOutAction}>
         <button className={`${menuItemCls} w-full`}>
           <IconLogout /> Sign out
