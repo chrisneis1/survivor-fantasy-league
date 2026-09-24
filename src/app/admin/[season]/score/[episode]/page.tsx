@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { ScoringGrid } from "@/components/scoring-grid";
-import { PageTitle, Pill, PolicyPill } from "@/components/ui";
+import { PageHeader, StatusBadge, PolicyPill } from "@/components/ui";
 import { getSeason } from "@/data";
 import { currentTribeId, isActiveAt, ownersOf, rosterForEpisode } from "@/domain/engine";
 import { rowsFromPublished, rulesForPhase, validatePublish } from "@/domain/scoring";
@@ -42,16 +42,16 @@ export default async function ScoreEpisode({ params }: { params: Promise<{ seaso
   return (
     <AdminShell season={season} active="">
       <Link href={`/admin/${season.id}`} className="text-sm text-muted hover:text-ink">← Overview</Link>
-      <PageTitle eyebrow={`${season.name} · ${episode.phase}`} title={published ? `Edit scoring · ${episode.title}` : `Score ${episode.title}`}>
+      <PageHeader eyebrow={`${season.name} · ${episode.phase}`} title={published ? `Edit scoring · ${episode.title}` : `Score ${episode.title}`}>
         <span className="flex flex-wrap items-center gap-2">
-          <Pill tone={published ? "good" : episode.state === "SCORING" ? "accent" : "neutral"}>{published ? "Published" : episode.state === "SCORING" ? "Scoring in progress" : "Not scored"}</Pill>
+          <StatusBadge tone={published ? "good" : episode.state === "SCORING" ? "accent" : "neutral"}>{published ? "Published" : episode.state === "SCORING" ? "Scoring in progress" : "Not scored"}</StatusBadge>
           <PolicyPill episode={episode} />
-          {episode.excludeFromStandings ? <Pill tone="accent">Doesn&apos;t count toward standings</Pill> : null}
+          {episode.excludeFromStandings ? <StatusBadge tone="accent">Doesn&apos;t count toward standings</StatusBadge> : null}
           <span className="text-sm">
             {published ? "Everything here is editable, the same as when you first scored it. Changes need a reason and recalculate standings right away." : "Score each castaway once. Team totals are worked out for you."}
           </span>
         </span>
-      </PageTitle>
+      </PageHeader>
 
       <ScoringGrid
         seasonId={season.id}

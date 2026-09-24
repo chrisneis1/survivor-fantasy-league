@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
-import { Card, PageTitle } from "@/components/ui";
+import { SiteShell } from "@/components/shell";
+import { Card, PageHeader } from "@/components/ui";
 import { signUpAction } from "@/server/actions";
 import { getUser } from "@/server/auth";
 import { MIN_PASSWORD_LENGTH } from "@/server/session";
@@ -14,9 +15,9 @@ export default async function SignUp({ searchParams }: { searchParams: Promise<{
   if (await getUser()) redirect(next || "/");
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 pt-16">
-      <PageTitle eyebrow="Survivor Fantasy League" title="Create an account" />
-      <Card className="p-5">
+    <SiteShell narrow>
+      <PageHeader eyebrow="Survivor Fantasy League" title="Create an account" />
+      <Card tone="raised" className="p-5 sm:p-6">
         <ActionForm action={signUpAction} submit="Create account">
           {next ? <input type="hidden" name="next" value={next} /> : null}
           <Field label="Your first name">
@@ -31,8 +32,8 @@ export default async function SignUp({ searchParams }: { searchParams: Promise<{
         This creates your account, but no team yet — tell your commissioner your name and they&apos;ll assign you to your team from Setup.
       </p>
       <p className="mt-2 text-center text-sm text-muted">
-        Already have an account? <Link href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`} className="text-accent hover:underline">Sign in</Link>.
+        Already have an account? <Link href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`} className="font-semibold text-accent hover:underline">Sign in</Link>.
       </p>
-    </div>
+    </SiteShell>
   );
 }

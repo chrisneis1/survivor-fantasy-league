@@ -1,69 +1,155 @@
 @import "tailwindcss";
 
-/* "Night at Tribal": deep jungle ink, torch-amber accent, bone text. Light mode is a parchment counterpart. */
+/*
+ * Design tokens — "Tribal Council at night". One dark-first theme: deep jungle charcoal, torch-amber accent, bone-white
+ * text, with warm sand/parchment reserved for feature surfaces (the leader, the current season, the finale).
+ * Every color in the app comes from here; components never hard-code a hex value (tribe colors come from season data).
+ */
 :root {
-  --bg: #f4efe3;
-  --surface: #fffdf7;
-  --surface-2: #ece5d3;
-  --line: #d9cfb8;
-  --ink: #1b2822;
-  --muted: #58665d;
-  --accent: #a85f08;
-  --accent-ink: #ffffff;
-  --good: #1d7a3d;
-  --bad: #b2372a;
-  /* dataviz categorical slots 1-3 (validated all-pairs) + field grey */
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --field: #b4ac98;
-}
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    --bg: #0b1310;
-    --surface: #121d18;
-    --surface-2: #192820;
-    --line: #26382f;
-    --ink: #f1e9d6;
-    --muted: #9aaba1;
-    --accent: #f2a93b;
-    --accent-ink: #1a1206;
-    --good: #6fd08c;
-    --bad: #f08a7c;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --field: #3f5248;
-  }
+  color-scheme: dark;
+
+  /* canvas + surfaces, darkest to lightest */
+  --bg: #0b1210;
+  --bg-2: #0f1815;
+  --surface: #131d19;
+  --surface-2: #19261f;
+  --surface-3: #213128;
+  --line: #26372e;
+  --line-strong: #3a5244;
+
+  /* text */
+  --ink: #f2ead8;
+  --ink-2: #d3cab5;
+  --muted: #98a89d;
+
+  /* torch */
+  --accent: #f0a53a;
+  --accent-strong: #ffbd57;
+  --accent-ink: #1c1206;
+  --ember: #e2682c;
+
+  /* status */
+  --good: #7ccf97;
+  --warn: #e8c567;
+  --bad: #f08d7e;
+
+  /* parchment feature surface (dark text on it) */
+  --sand: #ecdfc3;
+  --sand-2: #e0cfab;
+  --sand-ink: #241c11;
+  --sand-muted: #66583f;
+  --sand-line: #cdb88e;
+
+  /* podium */
+  --gold: #f0c050;
+  --silver: #c9d1cc;
+  --bronze: #d48d5a;
+
+  /* dataviz: categorical slots 1-3 (validated all-pairs on the dark surface) + the muted field */
+  --series-1: #3987e5;
+  --series-2: #e56a2e;
+  --series-3: #22a877;
+  --field: #3f5248;
+
+  --shadow-color: 0 0 0;
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
   --color-accent-ink: var(--accent-ink);
+  --color-ember: var(--ember);
   --color-good: var(--good);
+  --color-warn: var(--warn);
   --color-bad: var(--bad);
-  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --color-sand: var(--sand);
+  --color-sand-2: var(--sand-2);
+  --color-sand-ink: var(--sand-ink);
+  --color-sand-muted: var(--sand-muted);
+  --color-sand-line: var(--sand-line);
+  --color-gold: var(--gold);
+  --color-silver: var(--silver);
+  --color-bronze: var(--bronze);
+
+  --font-display: var(--font-display), "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 10px 30px -18px rgb(var(--shadow-color) / 0.8);
+  --shadow-raised: 0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 18px 40px -20px rgb(var(--shadow-color) / 0.9);
+  --shadow-glow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 12px 32px -16px color-mix(in srgb, var(--accent) 55%, transparent);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-rise: rise 280ms var(--ease-out-soft) both;
+  --animate-fade: fade 200ms ease-out both;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
 }
 
-html { background: var(--bg); color-scheme: light dark; -webkit-text-size-adjust: 100%; }
-body { overflow-x: clip; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 8rem;
+}
 body {
-  background:
-    radial-gradient(1200px 500px at 50% -200px, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
-    var(--bg);
+  overflow-x: clip;
   color: var(--ink);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background-color: var(--bg);
+  /* torchlight from above + a faint topographic contour texture */
+  background-image:
+    radial-gradient(900px 420px at 50% -180px, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%),
+    radial-gradient(700px 500px at 100% 0%, color-mix(in srgb, var(--series-3) 7%, transparent), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='560' viewBox='0 0 560 560'%3E%3Cg fill='none' stroke='%23f2ead8' stroke-opacity='0.035' stroke-width='1'%3E%3Cpath d='M-20 120c80-40 150 10 230-20s140-90 230-50 110 60 140 40'/%3E%3Cpath d='M-20 150c90-35 160 15 240-15s130-80 220-45 100 55 140 35'/%3E%3Cpath d='M-20 185c95-30 170 20 250-10s120-70 210-40 95 50 140 30'/%3E%3Cpath d='M-20 330c70 30 140-20 210 10s120 80 200 50 110-70 190-40'/%3E%3Cpath d='M-20 365c75 25 150-15 220 15s115 70 195 45 105-60 185-35'/%3E%3Cpath d='M-20 400c80 20 160-10 230 20s110 60 190 40 100-50 180-30'/%3E%3Cellipse cx='420' cy='470' rx='70' ry='34'/%3E%3Cellipse cx='420' cy='470' rx='44' ry='20'/%3E%3Cellipse cx='420' cy='470' rx='20' ry='8'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-attachment: scroll, scroll, fixed;
 }
+::selection { background: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--ink); }
+
 .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-.display { font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.01em; }
+.display { font-family: var(--font-display), "Arial Narrow", ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.005em; }
+.eyebrow { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* A clearly visible focus ring everywhere, on every surface. */
+:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; border-radius: 8px; }
+
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+
+/* Motion is only ever for comprehension; people who ask for less get none. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

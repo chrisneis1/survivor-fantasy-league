@@ -1,6 +1,6 @@
 import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
-import { Card, PageTitle, Pill, SectionTitle } from "@/components/ui";
+import { Card, PageHeader, StatusBadge, SectionHeader } from "@/components/ui";
 import { optionsToText, ruleUsed, rulePhases, layoutOf } from "@/domain/template";
 import { slug, validateSetup, type SetupIssue } from "@/domain/setup";
 import type { Season } from "@/domain/types";
@@ -65,15 +65,15 @@ export async function SetupBody({ season }: { season: Season }) {
 
   return (
     <>
-      <PageTitle eyebrow="Commissioner" title="Season setup">
+      <PageHeader eyebrow="Commissioner" title="Season setup">
         {editable
           ? "Work top to bottom. Each section shows what is still missing; the season can be activated when none remain."
           : "The season is locked. Only episode structure and scoring values can still change, and every change is logged."}
-      </PageTitle>
+      </PageHeader>
 
       <div className="grid gap-10">
         <section>
-          <SectionTitle>1 · Basics</SectionTitle>
+          <SectionHeader>1 · Basics</SectionHeader>
           <Card className="p-4">
             <Issues issues={issues} section="basics" />
             {editable ? (
@@ -108,7 +108,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         <section>
-          <SectionTitle>2 · Tribes, roster slots and cast</SectionTitle>
+          <SectionHeader>2 · Tribes, roster slots and cast</SectionHeader>
           <Card className="grid gap-6 p-4">
             <Issues issues={issues} section="cast" />
             <div>
@@ -209,7 +209,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         <section>
-          <SectionTitle>3 · Teams and opening order</SectionTitle>
+          <SectionHeader>3 · Teams and opening order</SectionHeader>
           <Card className="grid gap-6 p-4">
             <Issues issues={issues} section="teams" />
             <p className="text-sm text-muted">A team&apos;s name starts as a filler ("{"{Member}"}&apos;s Team") until the member sets their own from My Team — or you can rename one here any time before the season is archived.</p>
@@ -274,7 +274,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         <section>
-          <SectionTitle>4 · Episodes</SectionTitle>
+          <SectionHeader>4 · Episodes</SectionHeader>
           <Card className="grid gap-4 p-4">
             <Issues issues={issues} section="episodes" />
             {season.status !== "ARCHIVED" ? (
@@ -292,8 +292,8 @@ export async function SetupBody({ season }: { season: Season }) {
               <div key={e.id} className="border-b border-line pb-4 last:border-b-0 last:pb-0">
                 {e.state === "PUBLISHED" || season.status === "ARCHIVED" ? (
                   <p className="text-sm">
-                    <strong>{e.title}</strong> <span className="text-muted">· {e.phase} · {e.rosterPolicy.toLowerCase().replace("_", " ")}</span> <Pill tone="good">Locked</Pill>{" "}
-                    {e.excludeFromStandings ? <Pill>Doesn&apos;t count</Pill> : null}
+                    <strong>{e.title}</strong> <span className="text-muted">· {e.phase} · {e.rosterPolicy.toLowerCase().replace("_", " ")}</span> <StatusBadge tone="good">Locked</StatusBadge>{" "}
+                    {e.excludeFromStandings ? <StatusBadge>Doesn&apos;t count</StatusBadge> : null}
                   </p>
                 ) : (
                   <ActionForm action={updateEpisodeAction} submit={`Save episode ${e.number}`} ghost>
@@ -334,7 +334,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         <section>
-          <SectionTitle>5 · Scoring rules</SectionTitle>
+          <SectionHeader>5 · Scoring rules</SectionHeader>
           <p className="-mt-1 mb-3 text-sm text-muted">The scoring template. Each rule has a value for each phase (blank where it doesn't apply). Changes apply to episodes scored from now on; published scores keep the points they resolved to.</p>
           <Issues issues={issues} section="scoring" />
 
@@ -377,9 +377,9 @@ export async function SetupBody({ season }: { season: Season }) {
                 <Card key={r.key} className={`p-4 ${r.retired ? "opacity-70" : ""}`}>
                   <p className="flex flex-wrap items-center gap-2 font-semibold">
                     {r.name}
-                    <Pill>{r.inputType}</Pill>
-                    {r.retired ? <Pill tone="bad">Retired</Pill> : null}
-                    {used ? <Pill tone="good">In use</Pill> : null}
+                    <StatusBadge>{r.inputType}</StatusBadge>
+                    {r.retired ? <StatusBadge tone="bad">Retired</StatusBadge> : null}
+                    {used ? <StatusBadge tone="good">In use</StatusBadge> : null}
                     <span className="text-xs font-normal text-muted">scores in: {rulePhases(r).join(", ") || "no phase"}</span>
                   </p>
                   {season.status === "ARCHIVED" ? (
@@ -465,7 +465,7 @@ export async function SetupBody({ season }: { season: Season }) {
 
         {access?.kind === "admin" ? (
           <section>
-            <SectionTitle>Danger zone</SectionTitle>
+            <SectionHeader>Danger zone</SectionHeader>
             <Card className="border-bad/40 p-4">
               <h3 className="mb-1 font-semibold text-bad">Delete this season</h3>
               <p className="mb-3 text-sm text-muted">

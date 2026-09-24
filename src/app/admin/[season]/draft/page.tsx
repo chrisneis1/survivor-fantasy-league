@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { PickPanel } from "@/components/pick-panel";
-import { Card, PageTitle } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import { getSeason } from "@/data";
 import { openingTurn } from "@/domain/picks";
 import { openingPanel } from "@/lib/picker";
@@ -23,10 +23,10 @@ export default async function DraftBoard({ params }: { params: Promise<{ season:
   if (season.status === "SETUP") {
     return (
       <AdminShell season={season} active="">
-        <PageTitle eyebrow={season.name} title="Draft board">
+        <PageHeader eyebrow={season.name} title="Draft board">
           The draft hasn&apos;t been launched yet. Finish Setup, then launch it from{" "}
           <Link href={`/admin/${season.id}`} className="text-accent hover:underline">Overview</Link>.
-        </PageTitle>
+        </PageHeader>
       </AdminShell>
     );
   }

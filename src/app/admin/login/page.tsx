@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
-import { Card, PageTitle } from "@/components/ui";
+import { SiteShell } from "@/components/shell";
+import { Card, PageHeader } from "@/components/ui";
 import { signInAction } from "@/server/actions";
 import { isAdmin, usingDefaultPasscode } from "@/server/auth";
 
@@ -11,9 +12,9 @@ export const metadata = { title: "Commissioner sign-in" };
 export default async function Login() {
   if (await isAdmin()) redirect("/admin");
   return (
-    <div className="mx-auto w-full max-w-md px-4 pt-16">
-      <PageTitle eyebrow="Commissioner" title="Sign in" />
-      <Card className="p-5">
+    <SiteShell narrow>
+      <PageHeader eyebrow="Commissioner" title="Sign in" />
+      <Card tone="raised" className="p-5 sm:p-6">
         <ActionForm action={signInAction} submit="Sign in">
           <Field label="Admin password">
             <input name="password" type="password" autoComplete="current-password" required autoFocus className={inputCls} />
@@ -28,6 +29,6 @@ export default async function Login() {
       <p className="mt-4 text-center text-sm text-muted">
         Everyone else can browse the public site without signing in. A league member with the commissioner role signs in with their own username and password instead of here.
       </p>
-    </div>
+    </SiteShell>
   );
 }

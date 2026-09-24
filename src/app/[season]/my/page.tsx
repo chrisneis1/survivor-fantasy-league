@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
-import { btnGhostCls, inputCls } from "@/components/styles";
+import { btnCls, btnGhostCls, inputCls } from "@/components/styles";
 import { PickPanel } from "@/components/pick-panel";
 import { SeasonShell } from "@/components/shell";
-import { Card, PageTitle, Pill, SectionTitle } from "@/components/ui";
+import { IconArrowRight, IconMyTeam } from "@/components/icons";
+import { RosterSlot, SwapLine } from "@/components/league";
+import { Card, EmptyState, PageHeader, RankBadge, StatCard, StatusBadge, SectionHeader } from "@/components/ui";
 import { getSeason } from "@/data";
-import { effectiveRoster, isActiveAt, latestPublished, standings } from "@/domain/engine";
+import { currentTribeId, effectiveRoster, isActiveAt, latestPublished, standings, statusEventFor } from "@/domain/engine";
 import { currentTurn, openWindow, openingSequence, openingTurn, picksRemaining } from "@/domain/picks";
 import { episodeLabel, plural, seasonPath } from "@/lib/format";
 import { openingPanel, replacementPanel } from "@/lib/picker";
-import { castawayName, teamOf } from "@/lib/view";
+import { castawayName, exitLabel, teamOf } from "@/lib/view";
 import { wagerCandidates, wagerDeadlineEpisode } from "@/domain/wager";
 import { store } from "@/server";
 import { changeMyPasswordAction, placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
@@ -28,20 +30,24 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
   if (!teamId) {
     return (
       <SeasonShell season={season} active="/my">
-        <PageTitle eyebrow={season.name} title="My Team">
-          {user ? (
-            <>This page is for team owners. Your account isn&apos;t assigned to a team in {season.name} yet — ask your commissioner to assign it from Members.</>
-          ) : (
-            <>
-              This page is for team owners.{" "}
-              <Link href={`/login?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className="text-accent hover:underline">Sign in</Link>
-              {" "}or{" "}
-              <Link href={`/signup?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className="text-accent hover:underline">create an account</Link>
-              , then ask your commissioner to assign it to your team.
-            </>
-          )}
-        </PageTitle>
-        {user ? <PasswordCard /> : null}
+        <PageHeader eyebrow={season.name} title="My Team" />
+        <EmptyState
+          icon={<IconMyTeam size={22} />}
+          title={user ? "No team assigned yet" : "This page is for team owners"}
+          action={
+            user ? null : (
+              <span className="flex flex-wrap justify-center gap-2">
+                <Link href={`/login?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className={btnCls}>Sign in</Link>
+                <Link href={`/signup?next=${encodeURIComponent(seasonPath(season.id, "/my"))}`} className={btnGhostCls}>Create an account</Link>
+              </span>
+            )
+          }
+        >
+          {user
+            ? <>Your account isn&apos;t assigned to a team in {season.name} yet — ask your commissioner to assign it from Members.</>
+            : "Sign in or create an account, then ask your commissioner to assign it to your team."}
+        </EmptyState>
+        {user ? <div className="mt-8 max-w-2xl"><PasswordCard /></div> : null}
       </SeasonShell>
     );
   }
@@ -62,20 +68,28 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
 
   return (
     <SeasonShell season={season} active="/my">
-      <PageTitle eyebrow={`${team.member}'s team`} title={team.name}>
-        {season.status === "OPENING_SELECTION"
-          ? "The draft is under way."
-          : row
-            ? `Rank ${row.rank} · ${row.total} points · ${swapsUsed} ${swapsUsed === 1 ? "swap" : "swaps"} used${limit === null ? "" : ` of ${limit}`}`
-            : ""}
-      </PageTitle>
+      <PageHeader
+        eyebrow={<>My team <span className="text-muted">·</span> {team.member}</>}
+        title={team.name}
+        actions={<Link href={seasonPath(season.id, `/teams/${teamId}`)} className={btnGhostCls}>Team profile <IconArrowRight size={16} /></Link>}
+      >
+        {season.status === "OPENING_SELECTION" ? "The draft is under way." : null}
+      </PageHeader>
+
+      {season.status !== "OPENING_SELECTION" && row ? (
+        <div className="-mt-2 mb-6 grid grid-cols-3 gap-2.5">
+          <StatCard label="Rank" value={latestPublished(season) ? <RankBadge rank={row.rank} tied={row.tied} size="sm" /> : "—"} sub={`of ${season.teams.length}`} />
+          <StatCard label="Points" value={latestPublished(season) ? row.total : "—"} sub={latestPublished(season) ? `through ${episodeLabel(season, latestPublished(season))}` : "Not scored yet"} />
+          <StatCard label="Swaps used" value={<>{swapsUsed}{limit === null ? null : <span className="text-base text-muted"> / {limit}</span>}</>} sub={limit === null ? "no credit limit recorded" : "swap credits"} />
+        </div>
+      ) : null}
 
       {/* The action comes first on a phone: banner, then the picker, then everything else. */}
       {season.status === "OPENING_SELECTION" && draftTurn ? (
         <section className="mb-8">
-          <Card className={`mb-4 p-4 ${myTurnToDraft ? "border-accent/60 bg-accent/10" : ""}`}>
+          <Card tone={myTurnToDraft ? "accent" : "default"} className="mb-4 p-4">
             <p className="flex flex-wrap items-center gap-2">
-              <Pill tone={myTurnToDraft ? "accent" : "neutral"}>{myTurnToDraft ? "▶ You're up" : "○ Waiting"}</Pill>
+              <StatusBadge tone={myTurnToDraft ? "accent" : "neutral"}>{myTurnToDraft ? "▶ You're up" : "○ Waiting"}</StatusBadge>
               <span className="font-semibold">Pick {draftTurn.index + 1} of {draftTurn.total} · Round {draftTurn.round}</span>
             </p>
             <p className="mt-1 text-sm text-muted">
@@ -88,9 +102,9 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
 
       {win ? (
         <section className="mb-8">
-          <Card className={`mb-4 p-4 ${myTurnToSwap ? "border-accent/60 bg-accent/10" : ""}`}>
+          <Card tone={myTurnToSwap ? "accent" : "default"} className="mb-4 p-4">
             <p className="flex flex-wrap items-center gap-2">
-              <Pill tone={myTurnToSwap ? "accent" : "neutral"}>{myTurnToSwap ? "▶ You're up" : myTurns ? "○ " + (myTurns.status === "WAITING" ? "Waiting" : myTurns.status === "AUTO_SKIPPED" ? "Nothing to pick" : "Done") : "○ Not in this window"}</Pill>
+              <StatusBadge tone={myTurnToSwap ? "accent" : "neutral"}>{myTurnToSwap ? "▶ You're up" : myTurns ? "○ " + (myTurns.status === "WAITING" ? "Waiting" : myTurns.status === "AUTO_SKIPPED" ? "Nothing to pick" : "Done") : "○ Not in this window"}</StatusBadge>
               <span className="font-semibold">Pick window after {episodeLabel(season, win.afterEpisode)}</span>
             </p>
             <p className="mt-1 text-sm text-muted">
@@ -108,58 +122,58 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
 
       {season.status === "ACTIVE" && season.wagerState !== "OFF" ? <WagerCard season={season} teamId={teamId} /> : null}
 
-      <SectionTitle aside={<Link className="hover:text-ink" href={seasonPath(season.id, `/teams/${teamId}`)}>Full team page →</Link>}>Roster</SectionTitle>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
+      <SectionHeader aside={<Link className="hover:text-ink" href={seasonPath(season.id, `/teams/${teamId}`)}>Full team page →</Link>}>Roster</SectionHeader>
+      <ul className="grid grid-cols-[minmax(0,1fr)] gap-2.5 sm:grid-cols-2">
         {season.slots.map((slot, i) => {
           const cid = roster[i];
-          const out = cid && !isActiveAt(season, cid, Math.min(effEp, season.episodes.length));
+          if (!cid) return <li key={slot.id}><RosterSlot slotName={slot.name} /></li>;
+          const out = !isActiveAt(season, cid, Math.min(effEp, season.episodes.length));
+          const exit = out ? statusEventFor(season, cid) : undefined;
+          const tribe = season.tribes.find((t) => t.id === currentTribeId(season, cid, Math.max(latestPublished(season), 1)));
           return (
-            <Card key={slot.id} className="p-4">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted">{slot.name} slot</p>
-              {cid ? (
-                <p className={`display text-lg font-bold ${out ? "text-muted line-through" : ""}`}>
-                  {castawayName(season, cid)} {out ? <span className="text-sm font-normal no-underline">· out of the game</span> : null}
-                </p>
-              ) : (
-                <p className="text-muted">Not picked yet</p>
-              )}
-            </Card>
+            <li key={slot.id}>
+              <RosterSlot
+                slotName={slot.name}
+                name={castawayName(season, cid)}
+                href={seasonPath(season.id, `/castaways/${cid}`)}
+                tribe={tribe}
+                out={out ? (exit ? `${exitLabel(exit)} · ${episodeLabel(season, exit.afterEpisode)}` : "Out of the game") : undefined}
+              />
+            </li>
           );
         })}
-      </div>
-
-      <div className="mt-8">
-        <SectionTitle>Team name</SectionTitle>
-        <Card className="p-4">
-          <p className="mb-3 text-sm text-muted">Yours to change whenever you like — no rush, and no need to wait for anyone else's.</p>
-          <ActionForm action={renameMyTeamAction} submit="Save" ghost className="flex flex-wrap items-center gap-2">
-            <input type="hidden" name="seasonId" value={season.id} />
-            <input name="name" defaultValue={team.name} required maxLength={60} className={`${inputCls} max-w-xs`} />
-          </ActionForm>
-        </Card>
-      </div>
-
-      <PasswordCard />
-
-      <div className="mt-8">
-        <form action={userSignOutAction}>
-          <button className={btnGhostCls}>Sign out</button>
-        </form>
-      </div>
+      </ul>
 
       {myTx.length ? (
-        <div className="mt-8">
-          <SectionTitle>My swaps</SectionTitle>
+        <section className="mt-8" aria-label="My swaps">
+          <SectionHeader>My swaps</SectionHeader>
           <ul className="grid gap-2">
             {myTx.map((t) => (
-              <li key={t.id} className="rounded-xl border border-line bg-surface p-3 text-sm">
-                {castawayName(season, t.out)} → <strong>{castawayName(season, t.in)}</strong>
-                <span className="text-muted"> · {season.slots[t.slot].name} slot · from {episodeLabel(season, t.effectiveEpisode)}{t.free ? " · free" : ""}</span>
+              <li key={t.id} className="rounded-xl border border-line bg-surface px-3 py-2.5 text-sm">
+                <SwapLine out={castawayName(season, t.out)} into={castawayName(season, t.in)} slot={`${season.slots[t.slot].name} slot`} free={t.free} />
+                <span className="text-xs text-muted">Counts from {episodeLabel(season, t.effectiveEpisode)}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
+
+      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-2">
+        <section aria-label="Team name">
+          <SectionHeader>Team name</SectionHeader>
+          <Card className="p-4">
+            <p className="mb-3 text-sm text-muted">Yours to change whenever you like — no rush, and no need to wait for anyone else&apos;s.</p>
+            <ActionForm action={renameMyTeamAction} submit="Save" ghost className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="seasonId" value={season.id} />
+              <input name="name" defaultValue={team.name} required maxLength={60} aria-label="Team name" className={`${inputCls} max-w-xs`} />
+            </ActionForm>
+          </Card>
+          <form action={userSignOutAction} className="mt-4">
+            <button className={btnGhostCls}>Sign out</button>
+          </form>
+        </section>
+        <PasswordCard />
+      </div>
     </SeasonShell>
   );
 }
@@ -167,12 +181,12 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
 /** Change your own password. Needs the current one; other devices signed in as you are signed out. */
 function PasswordCard() {
   return (
-    <div className="mt-8">
-      <SectionTitle>Password</SectionTitle>
+    <section aria-label="Password">
+      <SectionHeader>Password</SectionHeader>
       <Card className="p-4">
         <p className="mb-3 text-sm text-muted">If the commissioner gave you a temporary password, change it here. Any other device signed in as you will be signed out.</p>
         <ActionForm action={changeMyPasswordAction} submit="Change password" ghost resetOnSuccess>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
             <Field label="Current password">
               <input name="current" type="password" autoComplete="current-password" required className={inputCls} />
             </Field>
@@ -185,7 +199,7 @@ function PasswordCard() {
           </div>
         </ActionForm>
       </Card>
-    </div>
+    </section>
   );
 }
 
@@ -198,7 +212,7 @@ async function WagerCard({ season, teamId }: { season: Season; teamId: string })
   const stillIn = mine ? candidates.some((c) => c.id === mine.castaway) : true;
   return (
     <section className="mb-8">
-      <SectionTitle aside={<Pill tone={open ? "accent" : "neutral"}>{open ? "Open" : "Locked"}</Pill>}>Final wager</SectionTitle>
+      <SectionHeader aside={<StatusBadge tone={open ? "accent" : "neutral"}>{open ? "Open" : "Locked"}</StatusBadge>}>Final wager</SectionHeader>
       <Card className="p-4">
         <p className="mb-3 text-sm text-muted">
           Back the castaway you think will win the season and wager {w.minStake}–{w.maxStake} points. If you&apos;re right you gain what you wagered; if you&apos;re wrong you lose it. Everyone&apos;s pick is hidden from everyone, including the commissioner, until the season ends.{open ? ` Wagering closes automatically once Episode ${wagerDeadlineEpisode(season)} is scored.` : ""}
