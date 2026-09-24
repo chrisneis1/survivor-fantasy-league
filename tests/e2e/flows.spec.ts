@@ -151,3 +151,20 @@ test("the commissioner can undo a draft back to setup", async ({ page }) => {
   await expect(page.getByText("Each team drafts 4 castaways")).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("changing your password lives on the account page, not My Team", async ({ page }) => {
+  // Signed out, the account page sends you to sign in first.
+  await page.goto("/account");
+  await expect(page).toHaveURL(/\/login\?next=(%2F|\/)account$/);
+
+  await signInAsPlayer(page, "/demo-active/my");
+  await page.goto("/demo-active/my");
+  await expect(page.getByLabel("Current password")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Account:/ }).click();
+  await page.getByRole("banner").getByRole("link", { name: "Change password" }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible();
+  await expect(page.getByLabel("Current password")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});

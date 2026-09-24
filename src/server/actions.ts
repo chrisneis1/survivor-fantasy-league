@@ -576,7 +576,7 @@ export async function resetUserPasswordAction(_: ActionState, fd: FormData): Pro
   await requireAdmin();
   const r = await resetUserPassword(str(fd, "userId"), str(fd, "password"));
   if (!r.ok) return { error: r.error };
-  return { ok: `Password reset for ${r.username}. Give them the temporary password you just typed so they can sign in, then have them change it from My Team.` };
+  return { ok: `Password reset for ${r.username}. Give them the temporary password you just typed so they can sign in, then have them change it from their account menu (their name at the top of the site → Change password).` };
 }
 
 /** A signed-in player changes their own password. Other devices are signed out; this one stays signed in. */

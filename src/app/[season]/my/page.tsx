@@ -15,9 +15,8 @@ import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, exitLabel, teamOf } from "@/lib/view";
 import { wagerCandidates, wagerDeadlineEpisode } from "@/domain/wager";
 import { store } from "@/server";
-import { changeMyPasswordAction, placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
+import { placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
 import { getMember, getUser } from "@/server/auth";
-import { MIN_PASSWORD_LENGTH } from "@/server/session";
 import type { Season } from "@/domain/types";
 
 export const metadata = { title: "My Team" };
@@ -47,7 +46,6 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
             ? <>Your account isn&apos;t assigned to a team in {season.name} yet — ask your commissioner to assign it from Members.</>
             : "Sign in or create an account, then ask your commissioner to assign it to your team."}
         </EmptyState>
-        {user ? <div className="mt-8 max-w-2xl"><PasswordCard /></div> : null}
       </SeasonShell>
     );
   }
@@ -163,7 +161,7 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
         </section>
       ) : null}
 
-      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-2">
+      <div className="mt-10 max-w-2xl">
         <section aria-label="Team name">
           <SectionHeader>Team name</SectionHeader>
           <Card className="p-4">
@@ -173,38 +171,15 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
               <input name="name" defaultValue={team.name} required maxLength={60} aria-label="Team name" className={`${inputCls} max-w-xs`} />
             </ActionForm>
           </Card>
-          <form action={userSignOutAction} className="mt-4">
-            <button className={btnGhostCls}>Sign out</button>
-          </form>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Link href="/account" className={btnGhostCls}>Change password</Link>
+            <form action={userSignOutAction}>
+              <button className={btnGhostCls}>Sign out</button>
+            </form>
+          </div>
         </section>
-        <PasswordCard />
       </div>
     </SeasonShell>
-  );
-}
-
-/** Change your own password. Needs the current one; other devices signed in as you are signed out. */
-function PasswordCard() {
-  return (
-    <section aria-label="Password">
-      <SectionHeader>Password</SectionHeader>
-      <Card className="p-4">
-        <p className="mb-3 text-sm text-muted">If the commissioner gave you a temporary password, change it here. Any other device signed in as you will be signed out.</p>
-        <ActionForm action={changeMyPasswordAction} submit="Change password" ghost resetOnSuccess>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <Field label="Current password">
-              <input name="current" type="password" autoComplete="current-password" required className={inputCls} />
-            </Field>
-            <Field label="New password" hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
-              <input name="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} required className={inputCls} />
-            </Field>
-            <Field label="New password again">
-              <input name="confirm" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} required className={inputCls} />
-            </Field>
-          </div>
-        </ActionForm>
-      </Card>
-    </section>
   );
 }
 
