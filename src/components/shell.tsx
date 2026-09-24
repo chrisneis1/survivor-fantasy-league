@@ -18,6 +18,7 @@ import {
   IconShield,
   IconStandings,
   IconTeams,
+  IconTrophy,
   IconWeek,
   TorchMark,
 } from "./icons";
@@ -140,6 +141,9 @@ async function SeasonSwitcher({ season }: { season: Season }) {
         <Link href="/seasons" className={menuItemCls}>
           <IconArchive /> Season archive
         </Link>
+        <Link href="/hall-of-fame" className={menuItemCls}>
+          <IconTrophy /> Hall of Fame
+        </Link>
       </div>
     </Menu>
   );
@@ -250,6 +254,9 @@ export async function SeasonShell({ season, active, children }: { season: Season
                 <li>
                   <Link href="/seasons" className={menuItemCls}><IconArchive /> Season archive</Link>
                 </li>
+                <li>
+                  <Link href="/hall-of-fame" className={menuItemCls}><IconTrophy /> Hall of Fame</Link>
+                </li>
                 {admin ? (
                   <li>
                     <Link href={`/admin/${season.id}`} className={`${menuItemCls} text-accent`}><IconShield /> Commissioner tools</Link>
@@ -281,6 +288,9 @@ export async function SiteShell({ children, narrow = false }: { children: ReactN
           <span className="flex-1" />
           <Link href="/seasons" className="hidden min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink sm:inline-flex">
             <IconArchive size={16} /> Seasons
+          </Link>
+          <Link href="/hall-of-fame" className="hidden min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink sm:inline-flex">
+            <IconTrophy size={16} /> Hall of Fame
           </Link>
           <AccountControls next="/" />
         </div>

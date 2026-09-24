@@ -87,7 +87,7 @@ test("signing out from the account menu", async ({ page }) => {
 test("commissioner pages load on a phone", async ({ page }) => {
   const errors = watchErrors(page);
   await signInAsAdmin(page);
-  for (const path of ["/admin", "/admin/users", "/admin/demo-active", "/admin/demo-active/setup", "/admin/demo-active/members", "/admin/demo-active/audit", "/admin/demo-active/draft", "/admin/demo-active/score/8", "/admin/survivor-51/setup"]) {
+  for (const path of ["/admin", "/admin/users", "/admin/demo-active", "/admin/demo-active/setup", "/admin/demo-active/members", "/admin/demo-active/audit", "/admin/demo-active/draft", "/admin/demo-active/score/8", "/admin/survivor-51/setup", "/admin/survivor-44", "/admin/survivor-44/setup", "/admin/survivor-44/score/3", "/admin/survivor-43/members", "/admin/survivor-48/draft"]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(200);
     await expect(page.getByRole("heading", { level: 1 }), path).toBeVisible();
@@ -167,4 +167,27 @@ test("changing your password lives on the account page, not My Team", async ({ p
   await expect(page.getByRole("heading", { name: "Change password" })).toBeVisible();
   await expect(page.getByLabel("Current password")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test("the commissioner adds the past seasons, and the Hall of Fame counts them", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/hall-of-fame");
+  await expect(page.getByRole("link", { name: /Survivor 49/ })).toHaveCount(0);
+
+  await signInAsAdmin(page);
+  await page.getByRole("button", { name: "Add 1 past season" }).click();
+  // The page refreshes with the season listed and the button gone.
+  await expect(page.getByText("Every past season from the league's old spreadsheets is in the archive.")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Survivor 49/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: /past season/ })).toHaveCount(0);
+
+  await page.goto("/hall-of-fame");
+  const s49 = page.getByRole("link", { name: /Survivor 49/ });
+  await expect(s49).toContainText("Shane");
+  await page.getByRole("link", { name: /^\d+\s*Shane/ }).click();
+  await expect(page).toHaveURL(/\/hall-of-fame\/shane$/);
+  await expect(page.getByRole("link", { name: /Survivor 49/ })).toContainText("Champion");
+  await expectNoHorizontalOverflow(page);
+  expect(errors).toEqual([]);
 });

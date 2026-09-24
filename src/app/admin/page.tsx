@@ -6,7 +6,8 @@ import { Card, PageHeader, StatusBadge, SectionHeader } from "@/components/ui";
 import { allSeasons } from "@/data";
 import { latestPublished } from "@/domain/engine";
 import { store } from "@/server";
-import { createSeasonAction } from "@/server/actions";
+import { bundledSeasons } from "@/data/archive";
+import { addPastSeasonsAction, createSeasonAction } from "@/server/actions";
 
 export const metadata = { title: "Commissioner" };
 
@@ -15,6 +16,7 @@ const statusTone = { SETUP: "accent", OPENING_SELECTION: "accent", ACTIVE: "good
 export default async function AdminHome() {
   const seasons = await allSeasons();
   const templates = await store().listTemplates();
+  const missing = bundledSeasons.filter((b) => !seasons.some((s) => s.id === b.id));
   return (
     <AdminShell>
       <PageHeader eyebrow="Commissioner" title="Seasons">
@@ -38,6 +40,24 @@ export default async function AdminHome() {
           </li>
         ))}
       </ul>
+
+      <div className="mt-10">
+        <SectionHeader>Past seasons</SectionHeader>
+        <Card className="p-4">
+          {missing.length ? (
+            <ActionForm action={addPastSeasonsAction} submit={`Add ${missing.length} past season${missing.length === 1 ? "" : "s"}`}>
+              <p className="text-sm text-muted">
+                {missing.map((s) => s.name).join(", ")} {missing.length === 1 ? "was" : "were"} imported from the league&apos;s old spreadsheets and can be added to the archive and the{" "}
+                <Link href="/hall-of-fame" className="text-accent hover:underline">Hall of Fame</Link>. They&apos;re added as completed seasons exactly as the sheets recorded them; seasons already here aren&apos;t touched.
+              </p>
+            </ActionForm>
+          ) : (
+            <p className="text-sm text-muted">
+              Every past season from the league&apos;s old spreadsheets is in the archive. <Link href="/hall-of-fame" className="text-accent hover:underline">Hall of Fame →</Link>
+            </p>
+          )}
+        </Card>
+      </div>
 
       <div className="mt-10">
         <SectionHeader>Start a new season</SectionHeader>

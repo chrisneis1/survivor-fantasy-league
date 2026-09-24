@@ -217,6 +217,8 @@ export interface SeasonArchive {
    * each roster week to week. When present, team scores come from here instead of from rosters.
    */
   teamScores?: Record<string, number[]>;
+  /** The sheet kept only each team's final picks: `team.draft` holds those, and who owned whom week to week is unknown. */
+  finalRostersOnly?: boolean;
 }
 
 // ---------- derived views ----------

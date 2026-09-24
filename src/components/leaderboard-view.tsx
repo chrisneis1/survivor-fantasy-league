@@ -71,7 +71,8 @@ export async function LeaderboardView({ season, query }: { season: Season; query
           movement: null,
           episodeScores: b.episodeScores,
           baseTotal: r.baseTotal,
-          wagerNote: !w || !cast ? "No wager" : `${cast} ${w.points > 0 ? "+" : "−"}${Math.abs(w.points)}`,
+          // Archived sheets sometimes record a bonus or a typed-in total without saying who was picked (see the notes).
+          wagerNote: !w || !w.points ? "No wager" : `${cast ?? "Final adjustment"} ${w.points > 0 ? "+" : "−"}${Math.abs(w.points)}`,
         };
       })
     : base;
@@ -240,6 +241,23 @@ export async function LeaderboardView({ season, query }: { season: Season; query
           <PointsRace series={race} labels={labels} />
         </Card>
       </section>
+
+      {season.archive ? <ArchiveNotes season={season} /> : null}
     </SeasonShell>
+  );
+}
+
+/** Where an archived season's record came from, and what its spreadsheet couldn't keep. */
+export function ArchiveNotes({ season }: { season: Season }) {
+  if (!season.archive?.notes.length) return null;
+  return (
+    <section className="mt-10" aria-labelledby="archive-notes-title">
+      <SectionHeader id="archive-notes-title">About this season&apos;s record</SectionHeader>
+      <Card className="p-4 sm:p-5">
+        <ul className="grid list-disc gap-1.5 pl-5 text-sm text-ink-2 marker:text-muted">
+          {season.archive.notes.map((n) => <li key={n}>{n}</li>)}
+        </ul>
+      </Card>
+    </section>
   );
 }

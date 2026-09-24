@@ -651,6 +651,7 @@ function importBreakdown(wb, number) {
         "Tribe names and colours were filled in afterwards; the merge is placed at the first individual immunity.",
       ],
       teamScores: Object.fromEntries(teams.map((t) => [t.id, t.weekly])),
+      finalRostersOnly: true,
     },
     reference: {
       teamWeek: teams.map((t) => t.weekly),

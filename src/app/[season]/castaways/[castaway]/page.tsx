@@ -27,7 +27,8 @@ export default async function CastawayPage({ params }: { params: Promise<{ seaso
       e,
       pts: castawayEpisodeTotal(season, c.id, e.number),
       entries: season.scores.find((s) => s.episode === e.number && s.castaway === c.id)?.entries ?? [],
-      owners: ownersOf(season, c.id, e.number),
+      // An archived season that kept only final rosters can't say who owned a castaway in a given week.
+      owners: season.archive?.finalRostersOnly ? null : ownersOf(season, c.id, e.number),
     }))
     // Nothing to show for episodes after the castaway left and nobody scored them.
     .filter((r) => r.entries.length > 0 || !exit || r.e.number <= exit.afterEpisode);
@@ -51,7 +52,11 @@ export default async function CastawayPage({ params }: { params: Promise<{ seaso
 
       <div className="mb-8 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         <StatCard tone="sand" label="Season points" value={total} sub={`through ${published ? episodeLabel(season, published) : "—"}`} />
-        <StatCard label="Drafted by" value={<>{drafted}<span className="text-base text-muted"> / {cap}</span></>} sub="opening rosters" />
+        {season.archive?.finalRostersOnly ? (
+          <StatCard label="Final rosters" value={drafted} sub="the draft wasn't recorded" />
+        ) : (
+          <StatCard label="Drafted by" value={<>{drafted}<span className="text-base text-muted"> / {cap}</span></>} sub="opening rosters" />
+        )}
         <StatCard className="col-span-2 sm:col-span-1" label="Owners now" value={<OwnershipMeter owners={season.episodes.length ? ownerCount(season, c.id, nowEp) : 0} cap={cap} />} sub={`Cap ${cap} teams per castaway`} />
       </div>
 
@@ -74,7 +79,7 @@ export default async function CastawayPage({ params }: { params: Promise<{ seaso
                   {entries.length ? (
                     <ul className="mt-1.5 flex flex-wrap gap-1.5">
                       {entries.map((en) => (
-                        <li key={en.rule} className="rounded-full border border-line-strong bg-surface-2 px-2.5 py-0.5 text-xs text-ink-2">
+                        <li key={en.rule} title={en.note} className="rounded-full border border-line-strong bg-surface-2 px-2.5 py-0.5 text-xs text-ink-2">
                           {ruleName(season, en.rule)} <ScoreChange n={en.points} className="font-semibold" />
                         </li>
                       ))}
@@ -82,11 +87,20 @@ export default async function CastawayPage({ params }: { params: Promise<{ seaso
                   ) : (
                     <p className="mt-1 text-sm text-muted">No scoring this episode.</p>
                   )}
-                  <p className="mt-2 text-xs text-muted">
-                    {owners.length === 0
-                      ? "On no team's scoring roster"
-                      : `On ${owners.length} ${owners.length === 1 ? "team" : "teams"}: ${owners.map((id) => teamOf(season, id).member).join(", ")}`}
-                  </p>
+                  {entries.some((en) => en.note) ? (
+                    <ul className="mt-1.5 grid gap-0.5 text-xs text-ink-2">
+                      {entries.filter((en) => en.note).map((en, i) => (
+                        <li key={i}><span className="font-semibold">{ruleName(season, en.rule)}:</span> {en.note}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {owners ? (
+                    <p className="mt-2 text-xs text-muted">
+                      {owners.length === 0
+                        ? "On no team's scoring roster"
+                        : `On ${owners.length} ${owners.length === 1 ? "team" : "teams"}: ${owners.map((id) => teamOf(season, id).member).join(", ")}`}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ol>

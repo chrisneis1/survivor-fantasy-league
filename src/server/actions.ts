@@ -3,6 +3,7 @@
 // rules, and writes through the versioned store together with its audit rows.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { bundledSeasons } from "@/data/archive";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, resetOpeningSelection } from "@/domain/picks";
 import { correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
 import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
@@ -139,6 +140,26 @@ export async function createSeasonAction(_: ActionState, fd: FormData): Promise<
   }
   if (created) redirect(`/admin/${id}/setup`);
   return {};
+}
+
+/**
+ * Adds any bundled past season (imported from the league's old spreadsheets) that isn't in the database yet.
+ * Admin-only. Seasons already there are never touched, so pressing it twice changes nothing.
+ */
+export async function addPastSeasonsAction(_: ActionState, __: FormData): Promise<ActionState> {
+  const access = await requireAdmin();
+  const added: string[] = [];
+  for (const past of bundledSeasons) {
+    if (await store().get(past.id)) continue;
+    try {
+      await store().create(structuredClone(past), [change(past, access.actor, "season", past.id, "IMPORT_ARCHIVE", undefined, { name: past.name })]);
+      added.push(past.name);
+    } catch (e) {
+      if (!/UNIQUE|PRIMARY/i.test(String(e))) return { error: e instanceof Error ? e.message : "Could not add the past seasons." };
+    }
+  }
+  revalidatePath("/", "layout");
+  return { ok: added.length ? `Added ${added.join(", ")} to the archive.` : "Every past season is already in the archive." };
 }
 
 /**
