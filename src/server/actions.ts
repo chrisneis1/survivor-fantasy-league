@@ -4,10 +4,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { bundledSeasons } from "@/data/archive";
+import { castPresets } from "@/data/casts";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, resetOpeningSelection } from "@/domain/picks";
 import { correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
 import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
-import { addRule, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
+import { addRule, applyCast, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
 import { lockWagers, openWagers, wagerProblem } from "@/domain/wager";
 import { type Access, changeOwnPassword, getMember, requireAccess, requireAdmin, resetUserPassword, signIn, signInUser, signOut, signOutUser, signUp } from "./auth";
@@ -229,6 +230,18 @@ export async function updateBasicsAction(_: ActionState, fd: FormData) {
 }
 
 // ---------- setup: tribes, slots, cast ----------
+
+/** Loads the researched tribes and cast bundled for this season (src/data/casts.ts), replacing the placeholders. */
+export async function loadCastAction(_: ActionState, fd: FormData) {
+  const seasonId = str(fd, "seasonId");
+  const preset = castPresets[seasonId];
+  if (!preset) return { error: "There's no researched cast for this season." };
+  return mutate(seasonId, (s, _at, ctx) => {
+    const r = applyCast(s, preset, ctx.actor);
+    const picks = r.season.slots.length;
+    return { ...r, message: `Loaded ${r.season.castaways.length} castaways on ${r.season.tribes.map((t) => t.name).join(" and ")}. Each team drafts ${picks}: ${r.season.slots.map((sl) => sl.name).join(", ")}.` };
+  });
+}
 
 export async function addTribeAction(_: ActionState, fd: FormData) {
   return mutate(str(fd, "seasonId"), (s, _at, ctx) => {

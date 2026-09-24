@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
 import { Card, PageHeader, StatusBadge, SectionHeader } from "@/components/ui";
-import { optionsToText, ruleUsed, rulePhases, layoutOf } from "@/domain/template";
+import { castPresets, type CastPreset } from "@/data/casts";
+import { applyCast, optionsToText, ruleUsed, rulePhases, layoutOf } from "@/domain/template";
 import { slug, validateSetup, type SetupIssue } from "@/domain/setup";
 import type { Season } from "@/domain/types";
 import { store } from "@/server";
@@ -14,6 +15,7 @@ import {
   addSlotAction,
   addTeamFromUserAction,
   addTribeAction,
+  loadCastAction,
   removeCastawayAction,
   updateCastawayAction,
   removeLastEpisodeAction,
@@ -52,6 +54,54 @@ function EditRow({ summary, children, className = "" }: { summary: ReactNode; ch
       </summary>
       <div className="border-t border-line px-3 pb-3 pt-3">{children}</div>
     </details>
+  );
+}
+
+/** The season's researched tribes and cast, with exactly what loading them would do, or why it can't. */
+function CastPresetCard({ season, preset }: { season: Season; preset: CastPreset }) {
+  const loaded =
+    season.castaways.length === preset.castaways.length &&
+    preset.castaways.every((p) => season.castaways.some((c) => c.id === slug(p.name) && c.initialTribeId === p.tribe));
+  let preview: Season | null = null;
+  let blocked: string | null = null;
+  try {
+    preview = applyCast(season, preset, "preview").season;
+  } catch (e) {
+    blocked = e instanceof Error ? e.message : "It can't be loaded right now.";
+  }
+  const byTribe = preset.tribes.map((t) => ({ t, names: preset.castaways.filter((c) => c.tribe === t.id).map((c) => c.name) }));
+  return (
+    <div className="rounded-xl border border-accent/40 bg-accent/5 p-3 sm:p-4">
+      <h3 className="font-semibold">{loaded ? "The researched cast is loaded" : "Researched cast"}</h3>
+      <ul className="mt-1 grid gap-0.5 text-sm text-muted">
+        {preset.notes.map((n) => <li key={n}>{n}</li>)}
+      </ul>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {byTribe.map(({ t, names }) => (
+          <div key={t.id} className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
+            <p className="flex items-center gap-2 font-semibold"><span aria-hidden className="size-2.5 rounded-full" style={{ background: t.color }} />{t.name} ({names.length})</p>
+            <p className="mt-0.5 text-ink-2">{names.join(", ")}</p>
+          </div>
+        ))}
+      </div>
+      {loaded ? null : blocked ? (
+        <p className="mt-3 text-sm text-warn">Can&apos;t load it now: {blocked}</p>
+      ) : preview ? (
+        <div className="mt-3">
+          <ActionForm
+            action={loadCastAction}
+            submit={`Load ${preset.castaways.length} castaways`}
+            confirm={`Replace the tribes (${season.tribes.map((t) => t.name).join(", ") || "none"}) and cast (${season.castaways.length}) with ${preset.tribes.map((t) => t.name).join(" and ")} (${preset.castaways.length} castaways)? Roster slots become: ${preview.slots.map((sl) => sl.name).join(", ")}.`}
+          >
+            <Hidden season={season} />
+            <p className="text-sm">
+              This replaces the current tribes ({season.tribes.map((t) => t.name).join(", ") || "none"}) and cast ({season.castaways.length}). Each team will still draft{" "}
+              <strong>{preview.slots.length}</strong>: {preview.slots.map((sl) => sl.name).join(", ")}. You can change that with the quick layout below afterwards.
+            </p>
+          </ActionForm>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -160,6 +210,7 @@ export async function SetupBody({ season }: { season: Season }) {
           <SectionHeader>2 · Tribes, roster slots and cast</SectionHeader>
           <Card className="grid gap-6 p-4">
             <Issues issues={issues} section="cast" />
+            {editable && castPresets[season.id] ? <CastPresetCard season={season} preset={castPresets[season.id]} /> : null}
             <div>
               <h3 className="mb-2 font-semibold">Tribes</h3>
               <ul className="mb-3 flex flex-wrap gap-2">

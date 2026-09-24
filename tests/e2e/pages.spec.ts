@@ -41,11 +41,11 @@ const pages: { path: string; heading: string | RegExp; text?: string }[] = [
   { path: "/demo-active/this-week", heading: "After Ep 7", text: "Window open" },
 
   // A new season still in setup: designed empty states, never made-up numbers.
-  { path: "/survivor-51", heading: "Leaderboard", text: "Standings will appear here after the commissioner publishes Episode 1." },
-  { path: "/survivor-51/this-week", heading: "This Week", text: "No pick window yet" },
-  { path: "/survivor-51/teams", heading: "Teams", text: "No teams yet" },
-  { path: "/survivor-51/castaways", heading: "Castaways", text: "The cast hasn't been announced" },
-  { path: "/survivor-51/episodes", heading: "Episodes", text: "Not scored yet" },
+  { path: "/survivor-52", heading: "Leaderboard", text: "Standings will appear here after the commissioner publishes Episode 1." },
+  { path: "/survivor-52/this-week", heading: "This Week", text: "No pick window yet" },
+  { path: "/survivor-52/teams", heading: "Teams", text: "No teams yet" },
+  { path: "/survivor-52/castaways", heading: "Castaways", text: "The cast hasn't been announced" },
+  { path: "/survivor-52/episodes", heading: "Episodes", text: "Not scored yet" },
 ];
 
 for (const p of pages) {

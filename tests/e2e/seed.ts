@@ -1,9 +1,9 @@
 // Builds the throwaway database the page tests run against (never production: only a local file: URL is accepted).
 //   npx tsx tests/e2e/seed.ts .e2e/league.db
 // Seasons: the bundled archived Survivor 43–48 and 50 (49 is left out, for the commissioner's "Add past seasons"
-// button to add); "demo-active", a copy cut back to Episode 7 with a pick window open and
-// the test player up next; "survivor-51", a new season still in setup with no teams or cast; and "draft-demo", an
-// opening draft three picks in.
+// button to add); "demo-active", a copy cut back to Episode 7 with a pick window open and the test player up next;
+// "survivor-51", a new season still in setup with no teams or cast (the flows load its researched cast);
+// "survivor-52", the same but left untouched; and "draft-demo", an opening draft three picks in.
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { createClient } from "@libsql/client";
@@ -54,6 +54,8 @@ async function main() {
   }
   await store.create(s);
   await store.create(createSeason(ref, "survivor-51", "Survivor 51"));
+  // Survivor 52: another new season in setup, left untouched by the flows, for the empty-state page checks.
+  await store.create(createSeason(ref, "survivor-52", "Survivor 52"));
 
   // "draft-demo": an opening draft in progress (three picks in), for undoing a draft back to setup.
   let d = createSeason(ref, "draft-demo", "Draft Demo");

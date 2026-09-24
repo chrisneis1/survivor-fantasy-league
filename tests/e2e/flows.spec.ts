@@ -191,3 +191,21 @@ test("the commissioner adds the past seasons, and the Hall of Fame counts them",
   await expectNoHorizontalOverflow(page);
   expect(errors).toEqual([]);
 });
+
+test("the commissioner loads the researched Survivor 51 cast", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signInAsAdmin(page);
+  await page.goto("/admin/survivor-51/setup");
+  await expect(page.getByRole("heading", { name: "Researched cast" })).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Load 21 castaways" }).click();
+  await expect(page.getByRole("heading", { name: "The researched cast is loaded" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cast (21)" })).toBeVisible();
+  await expect(page.getByText("Each team drafts 4 castaways")).toBeVisible();
+  await expect(page.getByText("opening pick from Savu")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await page.goto("/survivor-51/castaways");
+  await expect(page.getByText("Thien An")).toBeVisible();
+  expect(errors).toEqual([]);
+});
