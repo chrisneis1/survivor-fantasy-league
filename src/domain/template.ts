@@ -2,7 +2,7 @@
 // Pure functions over a Season; each returns the new season plus audit events.
 import { optionPoints } from "./scoring";
 import { slug } from "./setup";
-import type { AuditEvent, Episode, InputType, Phase, RuleOption, ScoringRule, Season } from "./types";
+import type { AuditEvent, Episode, InputType, Phase, RuleOption, ScoringRule, Season, Tribe } from "./types";
 
 const clone = <T>(v: T): T => structuredClone(v);
 type Result = { season: Season; audit: AuditEvent[] };
@@ -244,6 +244,45 @@ export function applyRosterLayout(season: Season, layout: { perTribe: number; wi
   next.slots = slots;
   for (const t of next.teams) t.draft = slots.map(() => "");
   return { season: next, audit: [ev(season, actor, "season", season.id, "APPLY_ROSTER_LAYOUT", season.slots.map((s) => s.name), slots.map((s) => s.name))] };
+}
+
+/**
+ * Loads a season's real tribes and cast in one step (e.g. once the premiere has revealed them), replacing whatever
+ * placeholder tribes and cast are there. The roster slots are rebuilt for the new tribes with the same number of
+ * picks per team: the same picks per tribe as before, and wild slots making up the rest. Only while nothing has been
+ * drafted or scored, since both refer to castaways by id.
+ */
+export function applyCast(season: Season, cast: { tribes: Tribe[]; castaways: { name: string; tribe: string }[] }, actor: string): Result {
+  if (season.status !== "SETUP") throw new Error("The cast can only be loaded while the season is in setup.");
+  if (season.teams.some((t) => t.draft.some(Boolean))) throw new Error("Some rosters are already filled in. Clear them before loading the cast.");
+  if (season.scores.length || season.drafts.length || season.statusEvents.length || season.tribeSwaps.length)
+    throw new Error("Episode scoring has already been saved for the current cast, so it can't be replaced.");
+  if (!cast.tribes.length) throw new Error("The cast has no tribes.");
+  const tribeIds = new Set(cast.tribes.map((t) => t.id));
+  const castaways = cast.castaways.map((c, i) => {
+    if (!tribeIds.has(c.tribe)) throw new Error(`${c.name}'s tribe isn't one of the tribes.`);
+    return { id: slug(c.name), name: c.name.trim(), initialTribeId: c.tribe, order: i + 1 };
+  });
+  if (new Set(castaways.map((c) => c.id)).size !== castaways.length) throw new Error("Two castaways share a name.");
+
+  const next = clone(season);
+  next.tribes = clone(cast.tribes);
+  next.castaways = castaways;
+  const picks = season.slots.length;
+  const perTribeNow = Math.max(0, ...season.tribes.map((t) => season.slots.filter((sl) => sl.restrictionTribeId === t.id).length));
+  const perTribe = Math.min(perTribeNow, Math.floor(picks / cast.tribes.length));
+  const wild = picks - perTribe * cast.tribes.length;
+  const laidOut = picks ? applyRosterLayout(next, { perTribe, wild }, actor).season : next;
+  return {
+    season: laidOut,
+    audit: [
+      ev(season, actor, "season", season.id, "LOAD_CAST", { tribes: season.tribes.map((t) => t.name), castaways: season.castaways.length, slots: season.slots.map((sl) => sl.name) }, {
+        tribes: cast.tribes.map((t) => t.name),
+        castaways: castaways.length,
+        slots: laidOut.slots.map((sl) => sl.name),
+      }),
+    ],
+  };
 }
 
 // =====================================================================================================
