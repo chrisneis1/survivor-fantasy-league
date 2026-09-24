@@ -8,8 +8,24 @@ npm run dev        # http://localhost:3000
 # Commissioner sign-in: copy .env.example to .env.local and set COMMISSIONER_PASSCODE and a 32+ char SESSION_SECRET,
 # then open /admin. Data lives in data/league.db (delete it to re-seed from src/data/seasons/*.json).
 npm test           # regression: 196 team-week scores + 14 season totals
+npm run build && npm run test:e2e   # page tests in a real browser (see "Tests and CI" below)
 npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seasons/survivor-50.json
 ```
+
+## Tests and CI
+
+- **`npm test`** — the scoring engine, store and rules (Node's test runner, `tests/*.test.ts`).
+- **`npm run test:e2e`** — page smoke tests with Playwright (`tests/e2e/`), against the production build, so run
+  `npm run build` first (and `npx playwright install chromium` once). The web server seeds a throwaway SQLite file in
+  `.e2e/` on every run (`tests/e2e/seed.ts`): archived Survivor 50, a "Demo Season" cut back to Episode 7 with a pick
+  window open, and an empty "Survivor 51" in setup. It only ever accepts a local file, never Turso. `pages.spec.ts`
+  loads every public page on a phone and a desktop (heading, no console errors, no sideways scrolling);
+  `flows.spec.ts` drives the phone navigation, filters, a real replacement pick, sign-out, the commissioner pages and
+  scoring an episode.
+- **CI** (`.github/workflows/ci.yml`) runs the typecheck, `npm test`, the build and the page tests on every pull
+  request and on `main`. A failing run uploads the Playwright report and traces as an artifact.
+- **App icons**: `src/app/icon.svg` is the favicon; `node scripts/render-icons.mjs` regenerates the PNGs (home-screen
+  icons in `public/icons/` and `src/app/apple-icon.png`). `src/app/manifest.ts` makes the site installable.
 
 ## Layout
 

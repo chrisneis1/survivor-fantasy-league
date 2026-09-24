@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useId, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cellKey, resolveInput, resolveRow, optionPoints, statusTypes } from "@/domain/scoring";
 import type { DraftRow, Phase, RuleInput, ScoringRule, StatusType } from "@/domain/types";
@@ -35,15 +35,18 @@ const exitLabel: Record<StatusType, string> = {
 
 const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
 
-/** One checkbox in a same-cell group. Checking one unchecks the rest; checking the checked one clears it (unless `clearable` is false, for tribe — a castaway is always on exactly one). */
-function CheckOption({ checked, onToggle, disabled, label, ariaLabel }: { checked: boolean; onToggle: () => void; disabled?: boolean; label: ReactNode; ariaLabel: string }) {
+/** One checkbox in a same-cell group. Checking one unchecks the rest; checking the checked one clears it (unless `clearable` is false, for tribe — a castaway is always on exactly one). `big` is the touch-sized version for phones. */
+function CheckOption({ checked, onToggle, disabled, label, ariaLabel, big = false }: { checked: boolean; onToggle: () => void; disabled?: boolean; label: ReactNode; ariaLabel: string; big?: boolean }) {
   return (
-    <label className={`flex items-center gap-1.5 text-xs leading-tight ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={onToggle} aria-label={ariaLabel} className="size-3.5 shrink-0 accent-[var(--accent)]" />
+    <label className={`flex items-center leading-tight ${big ? "min-h-10 gap-2.5 text-sm" : "gap-1.5 text-xs"} ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={onToggle} aria-label={ariaLabel} className={`${big ? "size-5" : "size-3.5"} shrink-0 accent-[var(--accent)]`} />
       {label}
     </label>
   );
 }
+
+/** Whether anything has been entered for a rule (used for the "n scored" count on phones). */
+const hasInput = (i: RuleInput | undefined) => !!i && (!!i.on || (i.quantity ?? 0) > 0 || i.option !== undefined || i.points !== undefined);
 
 export function ScoringGrid({
   seasonId,
@@ -85,6 +88,10 @@ export function ScoringGrid({
   // Edit mode only: exactly which cells the commissioner changed. correctEpisode only ever looks at these, so a
   // cell the grid could not perfectly redisplay from history is never silently rewritten by an unrelated edit.
   const [touched, setTouched] = useState<Set<string>>(new Set());
+  // Phones: score one castaway at a time, or one rule down the whole cast (fastest for tribe-wide results).
+  const [mobileView, setMobileView] = useState<"castaway" | "rule">("castaway");
+  const [mobileRule, setMobileRule] = useState<string>(rules[0]?.key ?? "exit");
+  const ruleSelectId = useId();
 
   const rowOf = (id: string): DraftRow => rows[id] ?? { castaway: id, inputs: {} };
   const tribeOf = (id: string) => rowOf(id).tribe ?? castaways.find((c) => c.id === id)?.tribeId;
@@ -201,6 +208,89 @@ export function ScoringGrid({
     const v = r.points[phase];
     return v === null ? "" : r.inputType === "quantity" ? `${signed(v)} each` : signed(v);
   };
+  // ---- the controls for one cell, shared by the desktop table and the phone layouts (same state, same labels) ----
+  const tribeBoxes = (c: GridCastaway, big = false) => (
+    <div className={`flex flex-wrap ${big ? "gap-x-4" : "my-1 gap-x-2 gap-y-0.5"}`}>
+      {tribes.map((t) => (
+        <CheckOption
+          key={t.id}
+          big={big}
+          checked={tribeOf(c.id) === t.id}
+          onToggle={() => setTribe(c.id, t.id)}
+          ariaLabel={`${c.name} is currently on ${t.name}`}
+          label={
+            <span className="flex items-center gap-1">
+              <span aria-hidden className="size-2 rounded-full" style={{ background: t.color }} />
+              {t.name}
+            </span>
+          }
+        />
+      ))}
+    </div>
+  );
+  const ruleInput = (c: GridCastaway, r: ScoringRule, big = false) => {
+    const input = rowOf(c.id).inputs[r.key] ?? {};
+    if (r.inputType === "boolean")
+      return <input type="checkbox" aria-label={`${r.name} for ${c.name}`} checked={!!input.on} onChange={(e) => setInput(c.id, r.key, { on: e.target.checked })} className={`${big ? "size-6" : "size-5"} accent-[var(--accent)]`} />;
+    if (r.inputType === "quantity")
+      return <input type="number" min={0} step={1} inputMode="numeric" aria-label={`${r.name} for ${c.name}`} value={input.quantity ?? ""} onChange={(e) => setInput(c.id, r.key, { quantity: e.target.value === "" ? undefined : Number(e.target.value) })} className={`${inputCls} ${big ? "w-20" : "w-16 px-2 py-1"}`} />;
+    if (r.inputType === "choice")
+      return (
+        <div className={`grid ${big ? "gap-0" : "w-36 gap-0.5"}`}>
+          {(r.options ?? []).map((o, i) => {
+            const p = optionPoints(o, phase);
+            if (p === null) return null;
+            return (
+              <CheckOption
+                key={i}
+                big={big}
+                checked={input.option === i}
+                onToggle={() => setChoice(c.id, r.key, input.option !== undefined ? String(input.option) : undefined, String(i))}
+                ariaLabel={`${r.name} for ${c.name}: ${o.label}`}
+                label={<span>{o.label} <span className="num text-muted">({signed(p)})</span></span>}
+              />
+            );
+          })}
+        </div>
+      );
+    return (
+      <div className={`grid gap-1 ${big ? "grid-cols-[6rem_1fr] gap-2" : "w-40"}`}>
+        <input type="number" step="any" inputMode="decimal" aria-label={`${r.name} points for ${c.name}`} value={input.points ?? ""} onChange={(e) => setInput(c.id, r.key, { points: e.target.value === "" ? undefined : Number(e.target.value) })} className={`${inputCls} ${big ? "" : "px-2 py-1"}`} />
+        <input aria-label={`${r.name} note for ${c.name}`} placeholder="Note (required)" value={input.note ?? ""} onChange={(e) => setInput(c.id, r.key, { note: e.target.value })} className={`${inputCls} ${big ? "" : "px-2 py-1"}`} />
+      </div>
+    );
+  };
+  const exitBoxes = (c: GridCastaway, big = false) => (
+    <>
+      <div className={`grid ${big ? "gap-0 sm:grid-cols-2" : "w-36 gap-0.5"}`}>
+        {statusTypes.map((t) => (
+          <CheckOption
+            key={t}
+            big={big}
+            checked={rowOf(c.id).exit?.type === t}
+            disabled={exitsLocked}
+            onToggle={() => setChoice(c.id, "exit", rowOf(c.id).exit?.type, t)}
+            ariaLabel={`${c.name}: ${exitLabel[t]}`}
+            label={exitLabel[t]}
+          />
+        ))}
+      </div>
+      {exitsLocked ? <p className="mt-1 text-[11px] text-muted">A pick window already used this result.</p> : null}
+    </>
+  );
+  const totalCls = (n: number) => (n < 0 ? "text-bad" : n > 0 ? "text-good" : "text-muted");
+  // Phones list castaways under a heading for their current tribe (and, when editing, "Left the game" last).
+  const groups = orderedCastaways.reduce<{ label: string; color?: string; items: GridCastaway[] }[]>((acc, c) => {
+    const out = mode === "edit" && !!rowOf(c.id).exit;
+    const tribe = tribes.find((t) => t.id === tribeOf(c.id));
+    const label = out ? "Left the game" : tribe?.name ?? "No tribe";
+    const last = acc.at(-1);
+    if (last && last.label === label) last.items.push(c);
+    else acc.push({ label, color: out ? undefined : tribe?.color, items: [c] });
+    return acc;
+  }, []);
+  const chosenRule = rules.find((r) => r.key === mobileRule);
+
   const headTh = "sticky top-0 z-20 bg-surface-2 px-2 py-2 align-bottom";
   const headCornerTh = "sticky top-0 z-30 bg-surface-2 px-3 py-2";
 
@@ -215,7 +305,7 @@ export function ScoringGrid({
 
       {/* A bounded, independently scrolling grid: the header row and the first two columns stay put in both
           directions while the rest scrolls, spreadsheet-style — independent of the page's own scroll position. */}
-      <div className="-mx-4 max-h-[70vh] overflow-auto border-y border-line sm:mx-0 sm:max-h-[75vh] sm:rounded-2xl sm:border">
+      <div className="hidden max-h-[75vh] overflow-auto rounded-2xl border border-line md:block">
         <table className="w-full min-w-max border-collapse text-sm">
           <thead>
             <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted">
@@ -243,81 +333,117 @@ export function ScoringGrid({
                       <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: tribes.find((t) => t.id === tribeId)?.color ?? "#888" }} />
                       <span className={out ? "line-through decoration-bad/70" : ""}>{c.name}</span>
                     </span>
-                    <div className="my-1 flex flex-wrap gap-x-2 gap-y-0.5">
-                      {tribes.map((t) => (
-                        <CheckOption
-                          key={t.id}
-                          checked={tribeId === t.id}
-                          onToggle={() => setTribe(c.id, t.id)}
-                          ariaLabel={`${c.name} is currently on ${t.name}`}
-                          label={
-                            <span className="flex items-center gap-1">
-                              <span aria-hidden className="size-2 rounded-full" style={{ background: t.color }} />
-                              {t.name}
-                            </span>
-                          }
-                        />
-                      ))}
-                    </div>
+                    {tribeBoxes(c)}
                     <span className={`block text-xs ${out ? "text-bad/80" : "text-muted"}`} title={c.owners.join(", ")}>
                       {out ? exitLabel[row.exit!.type] : c.owners.length === 0 ? "On no team" : `On ${c.owners.length} ${c.owners.length === 1 ? "team" : "teams"}`}
                     </span>
                     {res.errors.map((e) => <span key={e} className="block text-xs text-bad">{e}</span>)}
                   </th>
                   <td className={`num sticky left-36 z-10 px-2 py-2 text-right text-base font-extrabold ${out ? "bg-bad/[0.06]" : "bg-surface"} ${res.total < 0 ? "text-bad" : res.total > 0 ? "text-good" : "text-muted"}`}>{signed(res.total)}</td>
-                  {rules.map((r) => {
-                    const input = row.inputs[r.key] ?? {};
-                    return (
-                      <td key={r.key} className="px-2 py-2">
-                        {r.inputType === "boolean" ? (
-                          <input type="checkbox" aria-label={`${r.name} for ${c.name}`} checked={!!input.on} onChange={(e) => setInput(c.id, r.key, { on: e.target.checked })} className="size-5 accent-[var(--accent)]" />
-                        ) : r.inputType === "quantity" ? (
-                          <input type="number" min={0} step={1} inputMode="numeric" aria-label={`${r.name} for ${c.name}`} value={input.quantity ?? ""} onChange={(e) => setInput(c.id, r.key, { quantity: e.target.value === "" ? undefined : Number(e.target.value) })} className={`${inputCls} w-16 px-2 py-1`} />
-                        ) : r.inputType === "choice" ? (
-                          <div className="grid w-36 gap-0.5">
-                            {(r.options ?? []).map((o, i) => {
-                              const p = optionPoints(o, phase);
-                              if (p === null) return null;
-                              return (
-                                <CheckOption
-                                  key={i}
-                                  checked={input.option === i}
-                                  onToggle={() => setChoice(c.id, r.key, input.option !== undefined ? String(input.option) : undefined, String(i))}
-                                  ariaLabel={`${r.name} for ${c.name}: ${o.label}`}
-                                  label={<span>{o.label} <span className="num text-muted">({signed(p)})</span></span>}
-                                />
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="grid w-40 gap-1">
-                            <input type="number" step="any" inputMode="decimal" aria-label={`${r.name} points for ${c.name}`} value={input.points ?? ""} onChange={(e) => setInput(c.id, r.key, { points: e.target.value === "" ? undefined : Number(e.target.value) })} className={`${inputCls} px-2 py-1`} />
-                            <input aria-label={`${r.name} note for ${c.name}`} placeholder="Note (required)" value={input.note ?? ""} onChange={(e) => setInput(c.id, r.key, { note: e.target.value })} className={`${inputCls} px-2 py-1`} />
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="px-2 py-2">
-                    <div className="grid w-36 gap-0.5">
-                      {statusTypes.map((t) => (
-                        <CheckOption
-                          key={t}
-                          checked={row.exit?.type === t}
-                          disabled={exitsLocked}
-                          onToggle={() => setChoice(c.id, "exit", row.exit?.type, t)}
-                          ariaLabel={`${c.name}: ${exitLabel[t]}`}
-                          label={exitLabel[t]}
-                        />
-                      ))}
-                    </div>
-                    {exitsLocked ? <p className="mt-1 text-[11px] text-muted">A pick window already used this result.</p> : null}
-                  </td>
+                  {rules.map((r) => (
+                    <td key={r.key} className="px-2 py-2">{ruleInput(c, r)}</td>
+                  ))}
+                  <td className="px-2 py-2">{exitBoxes(c)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Phones: no sideways table. Either one card per castaway, or one rule down the whole cast. */}
+      <div className="md:hidden">
+        <div role="group" aria-label="Score by" className="mb-3 flex rounded-full border border-line-strong bg-bg-2 p-1">
+          {(["castaway", "rule"] as const).map((v) => (
+            <button key={v} type="button" aria-pressed={mobileView === v} onClick={() => setMobileView(v)} className={`min-h-9 flex-1 rounded-full text-sm font-semibold transition-colors ${mobileView === v ? "bg-accent text-accent-ink" : "text-muted"}`}>
+              {v === "castaway" ? "By castaway" : "By rule"}
+            </button>
+          ))}
+        </div>
+        {mobileView === "rule" ? (
+          <div className="mb-3 text-sm">
+            <label htmlFor={ruleSelectId} className="mb-1 block font-semibold">Rule</label>
+            <select id={ruleSelectId} value={mobileRule} onChange={(e) => setMobileRule(e.target.value)} className={inputCls}>
+              {rules.map((r) => <option key={r.key} value={r.key}>{r.name}{ruleHeader(r) ? ` (${ruleHeader(r)})` : ""}</option>)}
+              <option value="exit">Left the game</option>
+            </select>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4">
+          {groups.map((g, gi) => (
+            <section key={gi} aria-label={g.label}>
+              <h3 className="eyebrow mb-2 flex items-center gap-2 text-muted">
+                {g.color ? <span aria-hidden className="size-2.5 rounded-full" style={{ background: g.color }} /> : null}
+                {g.label} <span className="num font-normal">· {g.items.length}</span>
+              </h3>
+              {mobileView === "rule" ? (
+                <ul className="overflow-hidden rounded-2xl border border-line bg-surface">
+                  {g.items.map((c) => (
+                    <li key={c.id} className={`flex items-start justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0 ${mode === "edit" && rowOf(c.id).exit ? "bg-bad/[0.06]" : ""}`}>
+                      <span className="min-w-0 pt-1.5">
+                        <span className="block truncate font-semibold">{c.name}</span>
+                        <span className={`num block text-xs font-bold ${totalCls(resolved[c.id].total)}`}>{signed(resolved[c.id].total)} total</span>
+                        {resolved[c.id].errors.map((e) => <span key={e} className="block text-xs text-bad">{e}</span>)}
+                      </span>
+                      <span className="shrink-0 pt-1">{mobileRule === "exit" ? exitBoxes(c, true) : chosenRule ? ruleInput(c, chosenRule, true) : null}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="grid gap-2">
+                  {g.items.map((c) => {
+                    const row = rowOf(c.id);
+                    const res = resolved[c.id];
+                    const out = mode === "edit" && !!row.exit;
+                    const scored = rules.filter((r) => hasInput(row.inputs[r.key])).length;
+                    return (
+                      <li key={c.id}>
+                        <details className={`group rounded-2xl border ${out ? "border-bad/30 bg-bad/[0.06]" : res.errors.length ? "border-bad/50 bg-surface" : "border-line bg-surface"}`}>
+                          <summary className="flex min-h-14 cursor-pointer items-center gap-3 px-3 py-2">
+                            <span className="min-w-0 flex-1">
+                              <span className={`block truncate font-semibold ${out ? "text-bad line-through decoration-bad/70" : ""}`}>{c.name}</span>
+                              <span className="block truncate text-xs text-muted">
+                                {out ? exitLabel[row.exit!.type] : c.owners.length === 0 ? "On no team" : `On ${c.owners.length} ${c.owners.length === 1 ? "team" : "teams"}`}
+                                {scored ? ` · ${scored} scored` : ""}
+                                {res.errors.length ? <span className="text-bad"> · needs attention</span> : null}
+                              </span>
+                            </span>
+                            <span className={`num text-xl font-extrabold ${totalCls(res.total)}`}>{signed(res.total)}</span>
+                            <span aria-hidden className="text-muted transition-transform group-open:rotate-180">▾</span>
+                          </summary>
+                          <div className="grid gap-1 border-t border-line px-3 pb-3 pt-2">
+                            <div className="py-1">
+                              <p className="eyebrow mb-1 text-muted">Tribe now</p>
+                              {tribeBoxes(c, true)}
+                            </div>
+                            {rules.map((r) => {
+                              const stacked = r.inputType === "choice" || r.inputType === "manual";
+                              return (
+                                <div key={r.key} className={`border-t border-line py-2 ${stacked ? "grid gap-1.5" : "flex items-center justify-between gap-3"}`}>
+                                  <span className="min-w-0 text-sm">
+                                    <span className="font-medium">{r.name}</span>
+                                    {ruleHeader(r) ? <span className="num ml-1.5 text-xs text-muted">{ruleHeader(r)}</span> : null}
+                                  </span>
+                                  {ruleInput(c, r, true)}
+                                </div>
+                              );
+                            })}
+                            <div className="border-t border-line pt-2">
+                              <p className="eyebrow mb-1 text-muted">Left the game</p>
+                              {exitBoxes(c, true)}
+                            </div>
+                            {res.errors.map((e) => <p key={e} className="text-xs text-bad">{e}</p>)}
+                          </div>
+                        </details>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          ))}
+        </div>
       </div>
 
       <details className="mt-6 rounded-2xl border border-line bg-surface">
@@ -334,11 +460,10 @@ export function ScoringGrid({
         </ol>
       </details>
 
-      {/* Deliberately NOT sticky: the grid above has its own bounded scroll area (max-h-[70vh]), and a
-          viewport-pinned footer here would paint over its last rows and swallow the scroll-wheel input
-          meant for them. A plain trailing panel keeps the reason/save controls reachable by scrolling
-          the page a little further, without ever covering the grid. */}
-      <div className="-mx-4 mt-6 border-t border-line bg-bg/95 px-4 py-3 sm:mx-0 sm:rounded-2xl sm:border">
+      {/* On desktop, deliberately NOT sticky: the table above has its own bounded scroll area, and a viewport-pinned
+          footer would paint over its last rows and swallow the scroll-wheel input meant for them. Phones have no
+          inner scroll area, so there the save controls stay pinned to the bottom of the screen. */}
+      <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-line-strong bg-bg-2/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur md:static md:mx-0 md:rounded-2xl md:border md:bg-bg/95 md:pb-3 md:backdrop-blur-none">
         {mode === "edit" ? (
           <div className="grid gap-2">
             <label className="text-sm">
