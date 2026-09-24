@@ -4,7 +4,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { PickPanel } from "@/components/pick-panel";
 import { Card, PageHeader } from "@/components/ui";
 import { getSeason } from "@/data";
-import { openingTurn } from "@/domain/picks";
+import { openingTurn, openingTurnStuck } from "@/domain/picks";
 import { openingPanel } from "@/lib/picker";
 import { castawayName, teamOf } from "@/lib/view";
 import { adminOpeningPickAction } from "@/server/actions";
@@ -41,6 +41,12 @@ export default async function DraftBoard({ params }: { params: Promise<{ season:
           <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-accent">Pick {turn.index + 1} of {turn.total} · Round {turn.round}</p>
           <h1 className="display text-4xl font-extrabold uppercase leading-tight sm:text-6xl">{teamOf(season, turn.teamId).member}</h1>
           <p className="mt-1 text-muted">is up — {teamOf(season, turn.teamId).name}. Click a castaway below to fill a slot.</p>
+          {openingTurnStuck(season) ? (
+            <p role="alert" className="mt-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">
+              No castaway can legally go in any of this team&apos;s open slots, so the draft can&apos;t continue.{" "}
+              <Link href={`/admin/${season.id}`} className="font-semibold underline">Undo the draft from Overview</Link>, fix the slots or ownership cap in Setup, and run it again.
+            </p>
+          ) : null}
         </div>
       ) : (
         <Card className="mb-8 p-8 text-center">

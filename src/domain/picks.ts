@@ -1,7 +1,9 @@
 // Opening selection and weekly replacement windows (guide §5.1–5.4, §7).
 // Pure functions. Every write returns a new Season plus audit events; the store makes it atomic.
 import { buildPickQueue, effectiveRoster, isActiveAt, latestPublished, ownerCount, statusEventFor } from "./engine";
-import { rosterProblem, validateSetup } from "./setup";
+import { draftCanFinish, rosterProblem, validateSetup } from "./setup";
+
+const finishCache = new WeakMap<Season, Map<string, boolean>>();
 import type { AuditEvent, PickTurn, PickWindow, Season, Transaction } from "./types";
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -62,6 +64,40 @@ export function openOpeningSelection(season: Season, actor: string): Result {
   return { season: next, audit: [ev(season, actor, "season", season.id, "OPEN_OPENING_SELECTION", { order: season.config.openingSeed, mode: season.config.openingRoundMode })] };
 }
 
+/**
+ * Undoes the opening draft and returns the season to setup: every pick is cleared, so the slots, cast, teams and
+ * order can be fixed and the draft run again. Allowed while the draft is open, or once it has finished as long as
+ * nothing depends on the rosters yet (no counting episode published, no pick window, no swaps, wagering never opened).
+ */
+export function resetOpeningSelection(season: Season, actor: string, reason?: string): Result {
+  const block = draftResetBlock(season);
+  if (block) throw new Error(block);
+  const next = clone(season);
+  next.status = "SETUP";
+  next.opening.picks = [];
+  for (const t of next.teams) t.draft = next.slots.map(() => "");
+  return { season: next, audit: [ev(season, actor, "season", season.id, "RESET_OPENING_SELECTION", { picksCleared: season.opening.picks.length }, reason)] };
+}
+
+/** Why the opening draft can't be undone right now, or null if it can. */
+export function draftResetBlock(season: Season): string | null {
+  if (season.status === "OPENING_SELECTION") return null;
+  if (season.status !== "ACTIVE") return "Only a season in its opening draft can go back to setup.";
+  if (season.opening.picks.length === 0) return "This season wasn't drafted here, so there's no draft to undo.";
+  if (season.episodes.some((e) => e.state === "PUBLISHED" && !e.excludeFromStandings)) return "An episode that counts has been published, so the draft can no longer be undone.";
+  if (season.windows.length || season.transactions.length) return "A pick window has already run, so the draft can no longer be undone.";
+  if (season.wagerState !== "OFF") return "Wagering has been opened, so the draft can no longer be undone.";
+  return null;
+}
+
+/** True when the team that's up in the opening draft has no legal castaway for any of its open slots. */
+export function openingTurnStuck(season: Season): boolean {
+  const turn = openingTurn(season);
+  if (!turn) return false;
+  const team = season.teams.find((t) => t.id === turn.teamId)!;
+  return !season.slots.some((_, slot) => !team.draft[slot] && season.castaways.some((c) => openingBlock(season, turn.teamId, slot, c.id) === null));
+}
+
 /** Why `castawayId` cannot go in `slot` for this team right now (the same checks the server runs on commit). */
 export function openingBlock(season: Season, teamId: string, slot: number, castawayId: string): string | null {
   const team = season.teams.find((t) => t.id === teamId);
@@ -72,7 +108,17 @@ export function openingBlock(season: Season, teamId: string, slot: number, casta
   if (!isActiveAt(season, castawayId, latestPublished(season) + 1)) return "Eliminated";
   const ids = [...team.draft];
   ids[slot] = castawayId;
-  return rosterProblem(season, teamId, ids, { allowEmpty: true });
+  const problem = rosterProblem(season, teamId, ids, { allowEmpty: true });
+  if (problem) return problem;
+  // Taking this castaway here must still leave a way to fill every other empty slot in the draft; otherwise the
+  // draft would get stuck later on a team with no legal pick. Cached per season state, since the pick list asks
+  // about every castaway for every open slot.
+  const key = `${teamId}|${season.slots[slot].restrictionTribeId ?? "*"}|${castawayId}`;
+  let cache = finishCache.get(season);
+  if (!cache) finishCache.set(season, (cache = new Map()));
+  if (!cache.has(key)) cache.set(key, draftCanFinish(season, { [teamId]: ids }));
+  if (!cache.get(key)) return "Needed elsewhere: taking them here would leave another slot impossible to fill";
+  return null;
 }
 
 export function makeOpeningPick(season: Season, teamId: string, slot: number, castawayId: string, actor: string, at: string, reason?: string): Result {

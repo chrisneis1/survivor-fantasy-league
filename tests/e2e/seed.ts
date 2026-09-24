@@ -1,12 +1,13 @@
 // Builds the throwaway database the page tests run against (never production: only a local file: URL is accepted).
 //   npx tsx tests/e2e/seed.ts .e2e/league.db
 // Seasons: the bundled archived Survivor 50; "demo-active", a copy cut back to Episode 7 with a pick window open and
-// the test player up next; and "survivor-51", a new season still in setup with no teams or cast.
+// the test player up next; "survivor-51", a new season still in setup with no teams or cast; and "draft-demo", an
+// opening draft three picks in.
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { createClient } from "@libsql/client";
 import survivor50 from "../../src/data/seasons/survivor-50.json";
-import { currentTurn, makeReplacement, openPickWindow, openWindow, replaceableSlots, replacementCheck } from "../../src/domain/picks";
+import { currentTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingBlock, openingTurn, replaceableSlots, replacementCheck } from "../../src/domain/picks";
 import { createSeason } from "../../src/domain/setup";
 import type { Season } from "../../src/domain/types";
 import { hashPassword } from "../../src/server/session";
@@ -51,6 +52,19 @@ async function main() {
   }
   await store.create(s);
   await store.create(createSeason(ref, "survivor-51", "Survivor 51"));
+
+  // "draft-demo": an opening draft in progress (three picks in), for undoing a draft back to setup.
+  let d = createSeason(ref, "draft-demo", "Draft Demo");
+  d.castaways = ref.castaways.map((c) => ({ ...c }));
+  d.teams = ref.teams.slice(0, 4).map((t) => ({ id: t.id, member: t.member, name: t.name, draft: d.slots.map(() => "") }));
+  d.config.openingSeed = d.teams.map((t) => t.id);
+  d = openOpeningSelection(d, "seed").season;
+  for (let n = 0; n < 3; n++) {
+    const turn = openingTurn(d)!;
+    const pick = d.slots.flatMap((_, slot) => d.castaways.filter((c) => openingBlock(d, turn.teamId, slot, c.id) === null).map((c) => [slot, c.id] as const))[0];
+    d = makeOpeningPick(d, turn.teamId, pick[0], pick[1], "seed", "2026-03-03T00:00:00.000Z").season;
+  }
+  await store.create(d);
 
   const up = currentTurn(openWindow(s)!);
   if (!up) throw new Error("seed: expected a team to be up in the demo window");

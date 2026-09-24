@@ -233,7 +233,11 @@ export function applyRosterLayout(season: Season, layout: { perTribe: number; wi
   if (season.teams.some((t) => t.draft.some(Boolean))) throw new Error("Some rosters are already filled in. Clear them before changing the slots.");
   const slots: Season["slots"] = [];
   const add = (name: string, restrictionTribeId: string | null) => slots.push({ id: `slot${slots.length + 1}`, name, restrictionTribeId, enforceOnSwap: false });
-  for (const t of season.tribes) for (let k = 1; k <= perTribe; k++) add(perTribe === 1 ? t.name : `${t.name} ${k}`, t.id);
+  // Only tribes that actually have castaways get slots: a placeholder tribe the cast has since moved off, or last
+  // season's tribes copied into a new one, would otherwise get slots nobody can fill. Before any cast is entered,
+  // every tribe counts.
+  const tribes = season.castaways.length ? season.tribes.filter((t) => season.castaways.some((c) => c.initialTribeId === t.id)) : season.tribes;
+  for (const t of tribes) for (let k = 1; k <= perTribe; k++) add(perTribe === 1 ? t.name : `${t.name} ${k}`, t.id);
   for (let k = 1; k <= wild; k++) add(wild === 1 ? "Wild" : `Wild ${k}`, null);
   if (slots.length === 0) throw new Error("That leaves no roster slots.");
   const next = clone(season);

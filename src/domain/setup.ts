@@ -1,4 +1,5 @@
 // Season setup and lifecycle (guide §4, §13). Pure functions over a Season.
+import { isActiveAt, latestPublished } from "./engine";
 import type { AuditEvent, Season } from "./types";
 import { findWinner, resolveWagers, type WagerEntry } from "./wager";
 
@@ -185,6 +186,12 @@ export function validateSetup(season: Season, opts: { rosters?: boolean; episode
     }
   }
 
+  draftFeasibility(season, err, warn);
+
+  if (!season.rules.some((r) => r.key === season.config.wager.winnerRule && !r.retired)) {
+    warn("basics", "No scoring rule marks the season winner, so the final wager couldn't be settled. Pick one under Basics.");
+  }
+
   const seed = season.config.openingSeed;
   if (seed.length !== season.teams.length || season.teams.some((t) => !seed.includes(t.id))) err("rosters", "The opening seed order must list every team exactly once.");
   if (opts.rosters !== false) {
@@ -194,6 +201,128 @@ export function validateSetup(season: Season, opts: { rosters?: boolean; episode
     }
   }
   return out;
+}
+
+/**
+ * Whether every empty slot in the opening draft can still be filled: each slot needs a castaway still in the game,
+ * from its tribe if it has one; a castaway can be on at most `ownershipCap` teams; and a team can't hold the same
+ * castaway twice. That is a small bipartite matching (max flow), exact where simple counting is not — for example a
+ * team whose tribe slot could only be filled by the castaway it already took as a wild pick.
+ * `drafts` overrides teams' current rosters (to test a hypothetical pick).
+ */
+export function draftCanFinish(season: Season, drafts?: Record<string, string[]>): boolean {
+  const cap = season.config.ownershipCap;
+  const next = latestPublished(season) + 1;
+  const draftOf = (teamId: string) => drafts?.[teamId] ?? season.teams.find((t) => t.id === teamId)!.draft;
+  const cast = season.castaways.filter((c) => isActiveAt(season, c.id, next));
+  // Nodes: 0 source, 1 sink, then castaways, then (team, castaway) pairs, then empty (team, slot) pairs.
+  const adj: number[][] = [[], []];
+  const to: number[] = [];
+  const capL: number[] = [];
+  const node = () => adj.push([]) - 1;
+  const edge = (a: number, b: number, c: number) => {
+    adj[a].push(to.length); to.push(b); capL.push(c);
+    adj[b].push(to.length); to.push(a); capL.push(0);
+  };
+  const castNode = new Map<string, number>();
+  for (const c of cast) {
+    const owners = season.teams.filter((t) => draftOf(t.id).includes(c.id)).length;
+    const n = node();
+    castNode.set(c.id, n);
+    if (cap - owners > 0) edge(n, 1, cap - owners);
+  }
+  let demand = 0;
+  for (const t of season.teams) {
+    const d = draftOf(t.id);
+    const empty = season.slots.map((sl, i) => ({ sl, i })).filter(({ i }) => !d[i]);
+    if (!empty.length) continue;
+    const pair = new Map<string, number>();
+    for (const c of cast) {
+      if (d.includes(c.id)) continue;
+      const n = node();
+      pair.set(c.id, n);
+      edge(n, castNode.get(c.id)!, 1);
+    }
+    for (const { sl } of empty) {
+      demand++;
+      const n = node();
+      edge(0, n, 1);
+      for (const c of cast) if (pair.has(c.id) && (!sl.restrictionTribeId || c.initialTribeId === sl.restrictionTribeId)) edge(n, pair.get(c.id)!, 1);
+    }
+  }
+  // Augmenting paths; the flow is at most the number of empty slots, so this stays small.
+  let flow = 0;
+  const seen = new Uint8Array(adj.length);
+  const push = (u: number): boolean => {
+    if (u === 1) return true;
+    seen[u] = 1;
+    for (const e of adj[u]) {
+      if (capL[e] > 0 && !seen[to[e]] && push(to[e])) {
+        capL[e]--;
+        capL[e ^ 1]++;
+        return true;
+      }
+    }
+    return false;
+  };
+  while (flow < demand) {
+    seen.fill(0);
+    if (!push(0)) break;
+    flow++;
+  }
+  return flow === demand;
+}
+
+/**
+ * Whether the opening draft can actually be completed with these slots, this cast and this ownership cap — checked
+ * before the draft opens, because once it has, a team with no legal pick would leave the draft stuck. Also flags a
+ * slot layout that doesn't match the tribes (usually slots built before the real tribes were added).
+ */
+function draftFeasibility(season: Season, report: (s: SetupIssue["section"], m: string) => void, warn: (s: SetupIssue["section"], m: string) => void) {
+  if (season.castaways.length === 0 || season.slots.length === 0) return;
+  let blocked = false;
+  const err = (sec: SetupIssue["section"], m: string) => {
+    blocked = true;
+    report(sec, m);
+  };
+  // A castaway already out of the game (voted out in a premiere scored before the draft) can't be drafted.
+  const draftable = season.castaways.filter((c) => isActiveAt(season, c.id, latestPublished(season) + 1));
+  const cap = season.config.ownershipCap;
+  const teams = season.teams.length;
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+  const perTribe = new Map<string, number>();
+  for (const sl of season.slots) if (sl.restrictionTribeId) perTribe.set(sl.restrictionTribeId, (perTribe.get(sl.restrictionTribeId) ?? 0) + 1);
+  for (const [tribeId, needed] of perTribe) {
+    const tribe = season.tribes.find((t) => t.id === tribeId);
+    if (!tribe) continue; // reported above as a slot restricted to a tribe that does not exist
+    const pool = draftable.filter((c) => c.initialTribeId === tribeId).length;
+    if (pool === 0) {
+      err("rosters", `${needed === 1 ? "A roster slot needs" : `${needed} roster slots need`} a ${tribe.name} castaway, but no castaway starts on ${tribe.name}. Rebuild the slots for this season's tribes.`);
+    } else if (pool < needed) {
+      err("rosters", `Each team has ${plural(needed, `${tribe.name} slot`)}, but only ${plural(pool, `${tribe.name} castaway`)} can be drafted.`);
+    } else if (teams > 0 && needed * teams > pool * cap) {
+      err("rosters", `Not enough ${tribe.name} castaways to go around: ${teams} teams × ${plural(needed, "slot")} is ${needed * teams} picks, but ${plural(pool, "castaway")} × a cap of ${cap} allows only ${pool * cap}.`);
+    }
+  }
+  if (teams > 0 && season.slots.length * teams > draftable.length * cap) {
+    err("rosters", `Not enough castaways to go around: ${teams} teams × ${plural(season.slots.length, "slot")} is ${season.slots.length * teams} picks, but ${plural(draftable.length, "castaway")} × a cap of ${cap} allows only ${draftable.length * cap}.`);
+  }
+
+  // Counting can miss a combination that still can't work (a team needing its own distinct castaways), so if the
+  // simple checks pass, confirm with the exact one.
+  if (teams > 0 && !blocked && !draftCanFinish(season)) {
+    err("rosters", "With these slots, this cast and this ownership cap, the draft can't give every team a full roster. Add castaways, raise the ownership cap, or change the slots.");
+  }
+
+  // Not blocking, since a league may want it — but usually a sign the slots were built for different tribes.
+  if (perTribe.size > 0) {
+    const withCast = season.tribes.filter((t) => draftable.some((c) => c.initialTribeId === t.id));
+    const missing = withCast.filter((t) => !perTribe.has(t.id));
+    if (missing.length) warn("rosters", `${missing.map((t) => t.name).join(" and ")} ${missing.length === 1 ? "has" : "have"} castaways but no roster slot of ${missing.length === 1 ? "its" : "their"} own, while other tribes do. If the tribes changed, rebuild the slots.`);
+    const counts = new Set(withCast.filter((t) => perTribe.has(t.id)).map((t) => perTribe.get(t.id)));
+    if (counts.size > 1) warn("rosters", `Tribes have different numbers of slots (${withCast.filter((t) => perTribe.has(t.id)).map((t) => `${t.name} ${perTribe.get(t.id)}`).join(", ")}).`);
+  }
 }
 
 export const canActivate = (season: Season) => season.status === "SETUP" && !validateSetup(season).some((i) => i.level === "error");
