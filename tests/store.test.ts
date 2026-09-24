@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import survivor50 from "../src/data/seasons/survivor-50.json";
 import type { Season } from "../src/domain/types";
+import { hashPassword, verifyPassword } from "../src/server/session";
 import { ConflictError, createStore } from "../src/server/store";
 
 const ref = survivor50 as unknown as Season;
@@ -108,6 +109,30 @@ test("user accounts: only the password hash is stored, changing the password rev
   await store.setUserAdmin(userId, true);
   assert.equal((await store.checkUserLogin("shane", verifyAs("hash-v1")))!.isAdmin, true);
   assert.deepEqual((await store.listUsers()).map((u) => u.username), ["shane"]);
+});
+
+test("a password reset: the old password stops working, the new one works, and the session key rotates", async () => {
+  const store = fresh("reset");
+  const loginWith = (password: string) => store.checkUserLogin("shane", (hash) => verifyPassword(password, hash));
+  const userId = await store.createUser("shane", hashPassword("old-pass"));
+  const before = (await loginWith("old-pass"))!;
+  assert.equal(before.userId, userId);
+
+  const newKey = await store.setUserPassword(userId, hashPassword("temp-pass"));
+
+  assert.equal(await loginWith("old-pass"), null, "the old password no longer signs in");
+  const after = (await loginWith("temp-pass"))!;
+  assert.equal(after.userId, userId, "the new password signs in to the same account");
+  assert.notEqual(after.key, before.key, "the session key changed, so cookies signed with the old key are revoked");
+  assert.equal(after.key, newKey, "the returned key is the one now stored, so the caller can re-issue its own session");
+  assert.equal((await store.userById(userId))!.key, newKey);
+
+  const raw = createClient({ url: `file:${join(dir, "reset.db")}` });
+  const { rows } = await raw.execute("SELECT password_hash FROM app_user");
+  assert.ok(!String(rows[0].password_hash).includes("temp-pass"), "only a hash is stored");
+  raw.close();
+
+  assert.equal(await store.setUserPassword("no-such-user", hashPassword("x-pass")), null, "an unknown account changes nothing");
 });
 
 test("season membership: a user runs at most one team per season, and a team holds at most one user", async () => {

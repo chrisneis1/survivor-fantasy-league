@@ -5,6 +5,7 @@ import { inputCls } from "@/components/styles";
 import { Card, PageTitle } from "@/components/ui";
 import { signUpAction } from "@/server/actions";
 import { getUser } from "@/server/auth";
+import { MIN_PASSWORD_LENGTH } from "@/server/session";
 
 export const metadata = { title: "Create an account" };
 
@@ -21,8 +22,8 @@ export default async function SignUp({ searchParams }: { searchParams: Promise<{
           <Field label="Your first name">
             <input name="username" autoComplete="username" required autoFocus className={inputCls} />
           </Field>
-          <Field label="Password" hint="At least 4 characters.">
-            <input name="password" type="password" autoComplete="new-password" minLength={4} required className={inputCls} />
+          <Field label="Password" hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
+            <input name="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} required className={inputCls} />
           </Field>
         </ActionForm>
       </Card>

@@ -13,8 +13,9 @@ import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, teamOf } from "@/lib/view";
 import { wagerCandidates, wagerDeadlineEpisode } from "@/domain/wager";
 import { store } from "@/server";
-import { placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
+import { changeMyPasswordAction, placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
 import { getMember, getUser } from "@/server/auth";
+import { MIN_PASSWORD_LENGTH } from "@/server/session";
 import type { Season } from "@/domain/types";
 
 export const metadata = { title: "My Team" };
@@ -40,6 +41,7 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
             </>
           )}
         </PageTitle>
+        {user ? <PasswordCard /> : null}
       </SeasonShell>
     );
   }
@@ -137,6 +139,8 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
         </Card>
       </div>
 
+      <PasswordCard />
+
       <div className="mt-8">
         <form action={userSignOutAction}>
           <button className={btnGhostCls}>Sign out</button>
@@ -157,6 +161,31 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
         </div>
       ) : null}
     </SeasonShell>
+  );
+}
+
+/** Change your own password. Needs the current one; other devices signed in as you are signed out. */
+function PasswordCard() {
+  return (
+    <div className="mt-8">
+      <SectionTitle>Password</SectionTitle>
+      <Card className="p-4">
+        <p className="mb-3 text-sm text-muted">If the commissioner gave you a temporary password, change it here. Any other device signed in as you will be signed out.</p>
+        <ActionForm action={changeMyPasswordAction} submit="Change password" ghost resetOnSuccess>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Current password">
+              <input name="current" type="password" autoComplete="current-password" required className={inputCls} />
+            </Field>
+            <Field label="New password" hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
+              <input name="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} required className={inputCls} />
+            </Field>
+            <Field label="New password again">
+              <input name="confirm" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} required className={inputCls} />
+            </Field>
+          </div>
+        </ActionForm>
+      </Card>
+    </div>
   );
 }
 

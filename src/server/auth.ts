@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { store } from "./index";
-import { SESSION_TTL_MS, USER_TTL_MS, createLimiter, hashPassword, passcodeMatches, signSession, signUserSession, verifyPassword, verifySession, verifyUserSession } from "./session";
+import { MIN_PASSWORD_LENGTH, SESSION_TTL_MS, USER_TTL_MS, createLimiter, hashPassword, passcodeMatches, signSession, signUserSession, verifyPassword, verifySession, verifyUserSession } from "./session";
 
 // ---------------------------------------------------------------------------------------------------------------
 // Two ways to be an admin, and one way to be a commissioner:
@@ -111,11 +111,13 @@ async function setUserCookie(userId: string, key: string) {
   });
 }
 
+const tooShort = `Passwords need to be at least ${MIN_PASSWORD_LENGTH} characters.`;
+
 /** Self-serve sign-up: creates the account and signs it straight in. It grants no season access on its own. */
 export async function signUp(username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const name = username.trim();
   if (!name) return { ok: false, error: "Choose a username." };
-  if (password.length < 4) return { ok: false, error: "Passwords need to be at least 4 characters." };
+  if (password.length < MIN_PASSWORD_LENGTH) return { ok: false, error: tooShort };
   let id: string;
   try {
     id = await store().createUser(name, hashPassword(password));
@@ -147,6 +149,43 @@ export async function getUser(): Promise<{ id: string; username: string; isAdmin
   if (!s) return null;
   const u = await store().userById(s.userId);
   return u && u.key === s.k ? { id: u.id, username: u.username, isAdmin: u.isAdmin } : null;
+}
+
+/**
+ * Admin reset of someone else's forgotten password. The caller must already have passed requireAdmin(). Every device
+ * signed in as that account is signed out; if the admin reset their own account, their own session is re-issued.
+ */
+export async function resetUserPassword(userId: string, password: string): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
+  if (password.length < MIN_PASSWORD_LENGTH) return { ok: false, error: tooShort };
+  const target = await store().userById(userId);
+  if (!target) return { ok: false, error: "That account no longer exists." };
+  const me = await getUser();
+  const key = await store().setUserPassword(userId, hashPassword(password));
+  if (!key) return { ok: false, error: "That account no longer exists." };
+  if (me?.id === userId) await setUserCookie(userId, key);
+  return { ok: true, username: target.username };
+}
+
+/**
+ * The signed-in account changes its own password, proving it knows the current one. Other devices are signed out;
+ * this one gets a fresh cookie so it stays signed in. Wrong guesses count against the same per-username lockout as
+ * sign-in, so this is no easier to brute-force than the login form.
+ */
+export async function changeOwnPassword(current: string, next: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const me = await getUser();
+  if (!me) return { ok: false, error: "Sign in first." };
+  if (next.length < MIN_PASSWORD_LENGTH) return { ok: false, error: tooShort };
+  const limiter = userLimiterFor(me.username);
+  if (limiter.blocked()) return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+  if (!(await store().checkUserLogin(me.username, (hash) => verifyPassword(current, hash)))) {
+    limiter.fail();
+    return { ok: false, error: "Your current password is not right." };
+  }
+  limiter.reset();
+  const key = await store().setUserPassword(me.id, hashPassword(next));
+  if (!key) return { ok: false, error: "That account no longer exists." };
+  await setUserCookie(me.id, key);
+  return { ok: true };
 }
 
 export async function signOutUser(): Promise<void> {
