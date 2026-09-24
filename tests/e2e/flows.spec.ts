@@ -122,3 +122,32 @@ test("the commissioner scores an episode on a phone", async ({ page }) => {
   await expect(page.getByRole("checkbox", { name: label, exact: true }).first()).toBeChecked();
   expect(errors).toEqual([]);
 });
+
+test("the slot builder says how many castaways each team will draft", async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.goto("/admin/survivor-51/setup");
+  // Survivor 51 starts from Survivor 50's three tribes and has no cast yet, so every tribe counts.
+  const perTribe = page.getByLabel("Picks from each tribe");
+  await perTribe.fill("2");
+  await page.getByLabel("Wild picks (any tribe)").fill("1");
+  await expect(page.getByRole("status").filter({ hasText: "this builds 7 slots" })).toContainText("each team drafts 7 castaways");
+  await expect(page.getByRole("button", { name: "Build 7 slots" })).toBeVisible();
+  await perTribe.fill("1");
+  await expect(page.getByRole("button", { name: "Build 4 slots" })).toBeVisible();
+});
+
+test("the commissioner can undo a draft back to setup", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signInAsAdmin(page);
+  await page.goto("/admin/draft-demo");
+  await expect(page.getByRole("heading", { name: "Undo the draft" })).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Undo the draft and go back to setup" }).click();
+  await page.waitForURL("**/admin/draft-demo/setup");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Season setup");
+  // Back in setup: the rosters are empty again and the draft can be launched afresh from Overview.
+  await page.goto("/admin/draft-demo");
+  await expect(page.getByRole("button", { name: "Launch to draft phase" })).toBeVisible();
+  await expect(page.getByText("Each team drafts 4 castaways")).toBeVisible();
+  expect(errors).toEqual([]);
+});

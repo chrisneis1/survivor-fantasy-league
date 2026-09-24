@@ -7,6 +7,7 @@ import { slug, validateSetup, type SetupIssue } from "@/domain/setup";
 import type { Season } from "@/domain/types";
 import { store } from "@/server";
 import { getAccess } from "@/server/auth";
+import { RosterLayoutForm } from "./roster-layout-form";
 import {
   addCastawayAction,
   addEpisodeAction,
@@ -28,7 +29,6 @@ import {
   removeRuleAction,
   retireRuleAction,
   applyEpisodeLayoutAction,
-  applyRosterLayoutAction,
   applyTemplateAction,
   saveTemplateAction,
   deleteTemplateAction,
@@ -81,6 +81,12 @@ export async function SetupBody({ season }: { season: Season }) {
   const allUsers = await store().listUsers();
   const inSeason = new Set(season.teams.map((t) => t.id));
   const availableUsers = allUsers.filter((u) => !inSeason.has(slug(u.username)));
+  // The quick layout builds slots only for tribes that have castaways (all tribes, before any cast is entered).
+  const slotTribes = season.castaways.length ? season.tribes.filter((t) => season.castaways.some((c) => c.initialTribeId === t.id)) : season.tribes;
+  // Start the quick-layout form from the slots as they are, when they follow the "N per tribe + wild" shape.
+  const restrictedCounts = slotTribes.map((t) => season.slots.filter((sl) => sl.restrictionTribeId === t.id).length);
+  const uniform = restrictedCounts.length > 0 && restrictedCounts.every((n) => n === restrictedCounts[0]) && season.slots.every((sl) => !sl.restrictionTribeId || slotTribes.some((t) => t.id === sl.restrictionTribeId));
+  const currentLayout = uniform ? { perTribe: restrictedCounts[0], wild: season.slots.filter((sl) => !sl.restrictionTribeId).length } : { perTribe: 2, wild: 0 };
   const sections: { id: string; label: string; issues: SetupIssue["section"][] }[] = [
     { id: "basics", label: "Basics", issues: ["basics"] },
     { id: "cast", label: "Tribes & cast", issues: ["cast", "rosters"] },
@@ -183,15 +189,14 @@ export async function SetupBody({ season }: { season: Season }) {
             <div>
               <h3 className="mb-2 font-semibold">Roster slots</h3>
               <Issues issues={issues} section="rosters" />
+              <p className="mb-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
+                Each team drafts <strong>{season.slots.length} {season.slots.length === 1 ? "castaway" : "castaways"}</strong>, one per slot
+                {season.slots.length ? <> — so the draft runs {season.slots.length} {season.slots.length === 1 ? "round" : "rounds"}</> : null}.
+              </p>
               {editable ? (
-                <ActionForm action={applyRosterLayoutAction} submit="Build slots" ghost confirm="Replace the roster slots? Teams' rosters must still be empty.">
-                  <Hidden season={season} />
-                  <p className="text-sm text-muted">Quick layout: how many castaways each team picks from every tribe, plus any wild picks. Two tribes with 2 each gives four slots.</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Picks from each tribe"><input name="perTribe" type="number" min={0} max={6} defaultValue={2} required className={inputCls} /></Field>
-                    <Field label="Wild picks (any tribe)"><input name="wild" type="number" min={0} max={6} defaultValue={0} className={inputCls} /></Field>
-                  </div>
-                </ActionForm>
+                <div className="mb-3">
+                  <RosterLayoutForm seasonId={season.id} tribes={slotTribes.map((t) => ({ id: t.id, name: t.name }))} skipped={season.tribes.filter((t) => !slotTribes.includes(t)).map((t) => t.name)} initial={currentLayout} />
+                </div>
               ) : null}
               <ul className="mb-3 grid gap-2">
                 {season.slots.map((sl, i) => (

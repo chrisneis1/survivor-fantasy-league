@@ -5,7 +5,7 @@ import type { DraftRow, Season } from "../src/domain/types";
 import { availability, buildPickQueue, effectiveRoster, isActiveAt, latestPublished, standings, teamEpisodeScore, currentTribeId } from "../src/domain/engine";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, replaceableSlots, replacementCheck, windowBlock } from "../src/domain/picks";
 import { publishEpisode, saveDraft } from "../src/domain/scoring";
-import { createSeason, finalizeSeason } from "../src/domain/setup";
+import { createSeason, finalizeSeason, validateSetup } from "../src/domain/setup";
 import { findWinner, openWagers, wagerProblem } from "../src/domain/wager";
 
 const [seedArg, capArg, restrictedArg, skipArg] = process.argv.slice(2);
@@ -31,6 +31,12 @@ s.config.openingRoundMode = "SNAKE";
 s.config.ownershipCap = cap;
 s.episodes.forEach((e) => { if (e.number === 1) e.excludeFromStandings = true; });
 
+// Setup refuses a draft that can't finish (e.g. more picks than castaways × cap); report that instead of crashing.
+const setupErrors = validateSetup(s, { rosters: false, episodes: false, scoring: false }).filter((i) => i.level === "error");
+if (setupErrors.length) {
+  console.log(JSON.stringify({ seed: seedArg, cap, restricted, setupRejected: setupErrors.map((i) => i.message) }));
+  process.exit(0);
+}
 s = openOpeningSelection(s, "sim").season;
 let guard = 0;
 while (s.status === "OPENING_SELECTION" && guard++ < 200) {

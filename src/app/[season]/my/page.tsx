@@ -9,7 +9,7 @@ import { RosterSlot, SwapLine } from "@/components/league";
 import { Card, EmptyState, PageHeader, RankBadge, StatCard, StatusBadge, SectionHeader } from "@/components/ui";
 import { getSeason } from "@/data";
 import { currentTribeId, effectiveRoster, isActiveAt, latestPublished, standings, statusEventFor } from "@/domain/engine";
-import { currentTurn, openWindow, openingSequence, openingTurn, picksRemaining } from "@/domain/picks";
+import { currentTurn, openWindow, openingSequence, openingTurn, openingTurnStuck, picksRemaining } from "@/domain/picks";
 import { episodeLabel, plural, seasonPath } from "@/lib/format";
 import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, exitLabel, teamOf } from "@/lib/view";
@@ -96,6 +96,11 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
               {myTurnToDraft ? "Choose a slot, then a castaway. There's no time limit." : `${teamOf(season, draftTurn.teamId).member} is picking. You have ${plural(openingSequence(season).slice(draftTurn.index).filter((t) => t === teamId).length, "pick")} to go.`}
             </p>
           </Card>
+          {myTurnToDraft && openingTurnStuck(season) ? (
+            <p role="alert" className="mb-4 rounded-xl border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">
+              None of the remaining castaways can go in your open slots, so the draft is stuck on your turn. Let your commissioner know — they can reset the draft and fix the setup.
+            </p>
+          ) : null}
           {myTurnToDraft ? <PickPanel seasonId={season.id} mode="opening" {...openingPanel(season, teamId)} /> : null}
         </section>
       ) : null}

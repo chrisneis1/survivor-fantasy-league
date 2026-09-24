@@ -111,6 +111,21 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 - **Setup defines everything except opening rosters.** There's no more direct "type in every team's roster" path — the only way rosters get filled is the draft. "Launch to draft phase" needs the cast, tribes, slots, teams and pick order — not episodes or scoring values, which a league often finalizes closer to air date. Launching locks in teams and the pick order and sends the commissioner straight to the draft board.
 - **Opening pick order is always typed in by the commissioner** (Setup → Teams) — there's no in-app random draw. A league that wants a random order runs it themselves (a wheel, a drawn-names video call, whatever) and types the result in.
 - **The draft board** (`/admin/<season>/draft`) is a dedicated, commissioner-run screen designed to be shared on a call: a large "who's up" banner, a searchable click-to-pick list (`PickPanel`, the same component members use for their own turn, given an `onPick` that targets `adminOpeningPickAction` instead), and a live table of every team's roster filling in below. No reason field — entering the whole opening draft this way is the ordinary path now, not an occasional stand-in for a member who can't get to the site. When the last slot is filled the board itself announces "Draft complete!".
+- **Roster slots are built for the tribes that have castaways.** The quick layout ("picks from each tribe" + wild)
+  multiplies by the tribes that exist *and have cast* when you build, and previews the result ("each team drafts N
+  castaways") before applying. A placeholder tribe the cast has moved off, or last season's tribes copied into a new
+  season, get no slots. Setup and the Launch card both state the roster size, and the launch confirmation repeats it.
+- **The draft is checked before it opens.** Launch is refused when the draft could never finish: a slot tied to a
+  tribe with no castaways, more tribe slots than that tribe has castaways, or more picks than castaways × the
+  ownership cap allows (castaways voted out in a pre-draft premiere don't count). The exact check is a small
+  max-flow matching (`draftCanFinish` in `domain/setup.ts`), since a team can't hold the same castaway twice.
+  Lopsided layouts (a tribe with cast but no slot of its own) are warned about, not blocked.
+- **No pick can strand the draft.** `openingBlock` also refuses a pick after which some team's empty slot could no
+  longer be filled — typically a wild pick using up a tribe's last ownership spots — shown as "Needed elsewhere".
+  If a draft somehow still has no legal pick for the team that's up, the draft board and My Team say so.
+- **A draft can be undone** (Overview → Undo the draft): back to setup with every pick cleared, while the draft is
+  running or after it finished, until an episode that counts is published, a pick window runs or wagering opens
+  (`resetOpeningSelection`).
 - **Team names are filler until someone sets them.** A new team still defaults to "Member's Team"; from there, either the commissioner (Setup → Teams) or the member themselves (My Team → Team name) can rename it, any time before the season is archived — deliberately not gated to setup, since some people like to wait.
 
 ## Site-wide accounts, and deleting a season

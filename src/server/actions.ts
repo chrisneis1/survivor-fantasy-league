@@ -3,7 +3,7 @@
 // rules, and writes through the versioned store together with its audit rows.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn } from "@/domain/picks";
+import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, resetOpeningSelection } from "@/domain/picks";
 import { correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
 import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
 import { addRule, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
@@ -489,6 +489,14 @@ export async function openOpeningSelectionAction(_: ActionState, fd: FormData): 
   });
   if (r.error) return r;
   redirect(`/admin/${seasonId}/draft`);
+}
+
+/** Undoes the opening draft and returns the season to setup, clearing every pick, so the setup can be fixed. */
+export async function resetDraftAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const seasonId = str(fd, "seasonId");
+  const r = await mutate(seasonId, (s, _at, ctx) => ({ ...resetOpeningSelection(s, ctx.actor), message: "The draft was undone and the season is back in setup." }));
+  if (r.error) return r;
+  redirect(`/admin/${seasonId}/setup`);
 }
 
 /**

@@ -6,12 +6,12 @@ import { AdminShell } from "@/components/admin-shell";
 import { Card, PageHeader, StatusBadge, PolicyPill, SectionHeader } from "@/components/ui";
 import { getSeason } from "@/data";
 import { latestPublished } from "@/domain/engine";
-import { currentTurn, openWindow, openingTurn, windowBlock } from "@/domain/picks";
+import { currentTurn, draftResetBlock, openWindow, openingTurn, openingTurnStuck, windowBlock } from "@/domain/picks";
 import { validateSetup } from "@/domain/setup";
 import { episodeLabel } from "@/lib/format";
 import { teamOf } from "@/lib/view";
 import { store } from "@/server";
-import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction } from "@/server/actions";
+import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction, resetDraftAction } from "@/server/actions";
 
 export const metadata = { title: "Commissioner" };
 
@@ -68,11 +68,15 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
               {draftIssues.length > 8 ? <li className="text-muted">…and {draftIssues.length - 8} more.</li> : null}
             </ul>
           )}
+          <p className="mb-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
+            Each team drafts <strong>{season.slots.length} {season.slots.length === 1 ? "castaway" : "castaways"}</strong>
+            {season.slots.length ? <> ({season.slots.map((sl) => sl.name).join(", ")})</> : null}: {season.teams.length} teams × {season.slots.length} = <strong>{season.teams.length * season.slots.length} picks</strong>.
+          </p>
           <ActionForm
             action={openOpeningSelectionAction}
             submit="Launch to draft phase"
             disabled={draftErrors.length > 0 || season.teams.some((t) => t.draft.some(Boolean))}
-            confirm="Launch the draft? Teams and the pick order lock in, and the draft board opens."
+            confirm={`Launch the draft? Each team drafts ${season.slots.length} castaway${season.slots.length === 1 ? "" : "s"} (${season.slots.map((sl) => sl.name).join(", ")}). Teams, slots and the pick order lock in, and the draft board opens.`}
           >
             <input type="hidden" name="seasonId" value={season.id} />
           </ActionForm>
@@ -85,9 +89,27 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
           <p className="mb-3 text-sm">
             Pick {draftTurn.index + 1} of {draftTurn.total} · Round {draftTurn.round}. Up now: <strong>{teamOf(season, draftTurn.teamId).member}</strong>.
           </p>
+          {openingTurnStuck(season) ? (
+            <p role="alert" className="mb-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">
+              {teamOf(season, draftTurn.teamId).member} has no legal pick left for any open slot, so the draft can&apos;t continue. Undo the draft below, fix the slots or ownership cap in Setup, and run it again.
+            </p>
+          ) : null}
           <Link href={`/admin/${season.id}/draft`} className="inline-block rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-ink">
             Open the draft board →
           </Link>
+        </Card>
+      ) : null}
+
+      {draftResetBlock(season) === null ? (
+        <Card className="mb-8 p-4">
+          <SectionHeader>Undo the draft</SectionHeader>
+          <p className="mb-3 text-sm text-muted">
+            Made a mistake in setup — the wrong number of slots, the wrong tribes? This clears all {season.opening.picks.length} draft {season.opening.picks.length === 1 ? "pick" : "picks"} and puts the season back in setup so you can fix it and run the draft again.
+            {season.status === "ACTIVE" ? " Only possible until an episode that counts is published." : ""}
+          </p>
+          <ActionForm action={resetDraftAction} submit="Undo the draft and go back to setup" ghost confirm={`Undo the draft? All ${season.opening.picks.length} picks are cleared and every roster goes back to empty. This can't be undone.`}>
+            <input type="hidden" name="seasonId" value={season.id} />
+          </ActionForm>
         </Card>
       ) : null}
 

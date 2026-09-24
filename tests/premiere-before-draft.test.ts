@@ -41,6 +41,9 @@ test("an excluded episode publishes with no team having any roster yet, while th
 
 test("someone voted out in the premiere can't be drafted afterward", () => {
   let s = season();
+  // With A1 gone, 3 castaways at a cap of 1 couldn't fill 2 teams × 2 slots, and the draft won't open on a
+  // season that can't finish drafting; a cap of 2 leaves enough to go around.
+  s.config.ownershipCap = 2;
   s = saveDraft(s, { episode: 1, rows: [{ castaway: "a1", inputs: {}, exit: { type: "VOTED_OUT" } }] }, at);
   s = publishEpisode(s, 1, "t").season;
   s = openOpeningSelection(s, "t").season;

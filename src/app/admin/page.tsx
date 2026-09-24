@@ -47,7 +47,7 @@ export default async function AdminHome() {
               <Field label="Season name" hint="For example: Survivor 51">
                 <input name="name" required className={inputCls} />
               </Field>
-              <Field label="Start from" hint="A past season copies its slots, scoring, ownership cap and episode layout. A template copies just the scoring rules and episode layout. Teams and cast start empty.">
+              <Field label="Start from" hint="A past season copies its tribes, roster slots, scoring, ownership cap and episode layout — so check the tribes and rebuild the slots in Setup once the new tribes are known. A template copies just the scoring rules and episode layout. Teams and cast start empty.">
                 <select name="copyFrom" className={inputCls} defaultValue={seasons.at(-1)?.id ?? ""}>
                   <option value="">Start from scratch</option>
                   {templates.map((tp) => (
