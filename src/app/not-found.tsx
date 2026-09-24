@@ -1,11 +1,14 @@
 import Link from "next/link";
+import { TorchMark } from "@/components/icons";
+import { btnCls } from "@/components/styles";
 
 export default function NotFound() {
   return (
-    <div className="mx-auto max-w-md px-6 py-24 text-center">
-      <p className="display text-5xl font-extrabold text-accent">Snuffed.</p>
-      <p className="mt-3 text-muted">That page isn&apos;t part of this season.</p>
-      <Link href="/" className="mt-6 inline-block rounded-full bg-accent px-5 py-2 font-semibold text-accent-ink">Back to the leaderboard</Link>
-    </div>
+    <main id="main" className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-24 text-center">
+      <TorchMark size={56} className="grayscale" />
+      <p className="display mt-5 text-6xl font-extrabold uppercase text-accent">Snuffed.</p>
+      <p className="mt-2 text-ink-2">That page isn&apos;t part of this season — the tribe has spoken.</p>
+      <Link href="/" className={`${btnCls} mt-6`}>Back to the league</Link>
+    </main>
   );
 }

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
-import { Card, PageTitle, Pill } from "@/components/ui";
+import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { getSeason } from "@/data";
 import { store } from "@/server";
 
@@ -18,9 +18,9 @@ export default async function Audit({ params }: { params: Promise<{ season: stri
   const rows = await store().audit(season.id);
   return (
     <AdminShell season={season} active="/audit">
-      <PageTitle eyebrow="Commissioner" title="Audit log">
+      <PageHeader eyebrow="Commissioner" title="Audit log">
         Every setup change, publish, correction and roster entry, newest first. Nothing here can be edited.
-      </PageTitle>
+      </PageHeader>
       {rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Nothing has been logged for this season yet.</p>
       ) : (
@@ -29,7 +29,7 @@ export default async function Audit({ params }: { params: Promise<{ season: stri
             {rows.map((r) => (
               <li key={r.id} className="border-b border-line px-4 py-3 text-sm last:border-b-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Pill tone={r.action === "CORRECT" ? "bad" : r.action === "PUBLISH" ? "good" : "neutral"}>{r.action}</Pill>
+                  <StatusBadge tone={r.action === "CORRECT" ? "bad" : r.action === "PUBLISH" ? "good" : "neutral"}>{r.action}</StatusBadge>
                   <span className="font-semibold">{r.entityType} · {r.entityId}</span>
                   <span className="text-xs text-muted">
                     {r.actor} · {new Date(r.at).toLocaleString("en-US", { timeZone: season.config.timezone, dateStyle: "medium", timeStyle: "short" })}

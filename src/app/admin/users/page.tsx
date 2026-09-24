@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
 import { AdminShell } from "@/components/admin-shell";
 import { inputCls } from "@/components/styles";
-import { Card, PageTitle, Pill } from "@/components/ui";
+import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { store } from "@/server";
 import { resetUserPasswordAction, setUserAdminAction } from "@/server/actions";
 import { MIN_PASSWORD_LENGTH } from "@/server/session";
@@ -13,11 +13,11 @@ export default async function SiteUsers() {
   const users = await store().listUsers();
   return (
     <AdminShell>
-      <PageTitle eyebrow="Commissioner" title="Site accounts">
+      <PageHeader eyebrow="Commissioner" title="Site accounts">
         Everyone who has signed up, across every season. To put someone on a team, go to that season&apos;s Members
         page and assign their username there. If someone forgets their password, reset it here and give them the
         temporary one. <Link href="/admin" className="text-accent hover:underline">← Seasons</Link>
-      </PageTitle>
+      </PageHeader>
       {users.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Nobody has signed up yet.</p>
       ) : (
@@ -27,7 +27,7 @@ export default async function SiteUsers() {
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 font-semibold">
                   {u.username}
-                  {u.isAdmin ? <Pill tone="accent">Admin</Pill> : null}
+                  {u.isAdmin ? <StatusBadge tone="accent">Admin</StatusBadge> : null}
                 </span>
                 <ActionForm
                   action={setUserAdminAction}

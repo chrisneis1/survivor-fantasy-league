@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
 import { AdminShell } from "@/components/admin-shell";
-import { Card, PageTitle, Pill, SectionTitle } from "@/components/ui";
+import { Card, PageHeader, StatusBadge, SectionHeader } from "@/components/ui";
 import { allSeasons } from "@/data";
 import { latestPublished } from "@/domain/engine";
 import { store } from "@/server";
@@ -17,10 +17,10 @@ export default async function AdminHome() {
   const templates = await store().listTemplates();
   return (
     <AdminShell>
-      <PageTitle eyebrow="Commissioner" title="Seasons">
+      <PageHeader eyebrow="Commissioner" title="Seasons">
         Set up a season, score episodes and publish them. Nothing you save here reaches the public standings until you publish an episode.{" "}
         <Link href="/admin/users" className="text-accent hover:underline">Site accounts →</Link>
-      </PageTitle>
+      </PageHeader>
       <ul className="grid gap-3">
         {seasons.map((s) => (
           <li key={s.id}>
@@ -32,7 +32,7 @@ export default async function AdminHome() {
                     {s.teams.length} teams · {s.castaways.length} castaways · {latestPublished(s)} of {s.episodes.length} episodes published
                   </p>
                 </div>
-                <Pill tone={statusTone[s.status]}>{s.status === "ARCHIVED" ? "Archived" : s.status === "ACTIVE" ? "Active" : "In setup"}</Pill>
+                <StatusBadge tone={statusTone[s.status]}>{s.status === "ARCHIVED" ? "Archived" : s.status === "ACTIVE" ? "Active" : "In setup"}</StatusBadge>
               </Card>
             </Link>
           </li>
@@ -40,7 +40,7 @@ export default async function AdminHome() {
       </ul>
 
       <div className="mt-10">
-        <SectionTitle>Start a new season</SectionTitle>
+        <SectionHeader>Start a new season</SectionHeader>
         <Card className="p-4">
           <ActionForm action={createSeasonAction} submit="Create season">
             <div className="grid gap-3 sm:grid-cols-2">

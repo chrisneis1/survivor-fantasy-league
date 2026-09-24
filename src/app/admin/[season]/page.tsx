@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
 import { AdminShell } from "@/components/admin-shell";
-import { Card, PageTitle, Pill, PolicyPill, SectionTitle } from "@/components/ui";
+import { Card, PageHeader, StatusBadge, PolicyPill, SectionHeader } from "@/components/ui";
 import { getSeason } from "@/data";
 import { latestPublished } from "@/domain/engine";
 import { currentTurn, openWindow, openingTurn, windowBlock } from "@/domain/picks";
@@ -38,7 +38,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
 
   return (
     <AdminShell season={season} active="">
-      <PageTitle eyebrow="Commissioner" title={season.name}>
+      <PageHeader eyebrow="Commissioner" title={season.name}>
         {season.status === "SETUP"
           ? "This season is being set up. Activate it once setup is complete."
           : season.status === "OPENING_SELECTION"
@@ -48,11 +48,11 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
               ? `Next up: score ${nextUnpublished.title}.`
               : "Every episode is published."
             : "This season is archived and read-only."}
-      </PageTitle>
+      </PageHeader>
 
       {season.status === "SETUP" ? (
         <Card className="mb-8 p-4">
-          <SectionTitle aside={<Link href={`/admin/${season.id}/setup`} className="font-semibold text-accent hover:underline">Open setup →</Link>}>Launch to the draft phase</SectionTitle>
+          <SectionHeader aside={<Link href={`/admin/${season.id}/setup`} className="font-semibold text-accent hover:underline">Open setup →</Link>}>Launch to the draft phase</SectionHeader>
           <p className="mb-3 text-sm text-muted">
             Finish everything in Setup except opening rosters — those are what the draft is for. Launching locks in the teams and pick order and opens the draft board; you don&apos;t need episodes or scoring finished first.
           </p>
@@ -81,7 +81,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
 
       {season.status === "OPENING_SELECTION" && draftTurn ? (
         <Card className="mb-8 p-4">
-          <SectionTitle>The draft</SectionTitle>
+          <SectionHeader>The draft</SectionHeader>
           <p className="mb-3 text-sm">
             Pick {draftTurn.index + 1} of {draftTurn.total} · Round {draftTurn.round}. Up now: <strong>{teamOf(season, draftTurn.teamId).member}</strong>.
           </p>
@@ -93,7 +93,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
 
       {season.status === "ACTIVE" ? (
         <Card className="mb-8 p-4">
-          <SectionTitle aside={<Link href={`/${season.id}/this-week`} className="font-semibold text-accent hover:underline">This Week →</Link>}>Weekly pick window</SectionTitle>
+          <SectionHeader aside={<Link href={`/${season.id}/this-week`} className="font-semibold text-accent hover:underline">This Week →</Link>}>Weekly pick window</SectionHeader>
           {liveWindow ? (
             <p className="text-sm">
               A window is open after <strong>{episodeLabel(season, liveWindow.afterEpisode)}</strong>{up ? <>. Up now: <strong>{teamOf(season, up.teamId).member}</strong>.</> : "."} Skip, remind or close it from This Week.
@@ -114,7 +114,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
 
       {season.status === "ACTIVE" ? (
         <Card className="mb-8 p-4">
-          <SectionTitle aside={<Pill tone={season.wagerState === "OPEN" ? "accent" : season.wagerState === "LOCKED" ? "good" : "neutral"}>{season.wagerState === "OFF" ? "Not started" : season.wagerState === "OPEN" ? "Open" : "Locked"}</Pill>}>Final wager</SectionTitle>
+          <SectionHeader aside={<StatusBadge tone={season.wagerState === "OPEN" ? "accent" : season.wagerState === "LOCKED" ? "good" : "neutral"}>{season.wagerState === "OFF" ? "Not started" : season.wagerState === "OPEN" ? "Open" : "Locked"}</StatusBadge>}>Final wager</SectionHeader>
           <p className="mb-3 text-sm text-muted">
             Each member secretly backs a winner and wagers {season.config.wager.minStake}–{season.config.wager.maxStake} points at {season.config.wager.correctMultiplier}:{season.config.wager.wrongMultiplier}. Picks stay hidden from everyone, including you, until you finalize the season. Wagering closes by itself once Episode {wagerDeadlineEpisode(season)} is scored.
           </p>
@@ -145,7 +145,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
         <a href={`/admin/${season.id}/export`} className="rounded-full border border-line px-4 py-2 text-sm font-semibold hover:bg-surface-2">Download CSV</a>
       </Card>
 
-      <SectionTitle>Episodes</SectionTitle>
+      <SectionHeader>Episodes</SectionHeader>
       <ol className="grid gap-2">
         {season.episodes.map((e) => {
           const blocked = season.status !== "ACTIVE" || (e.state !== "PUBLISHED" && season.episodes.some((x) => x.number < e.number && x.state !== "PUBLISHED"));
@@ -153,9 +153,9 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
             <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="display w-16 font-bold">{e.phase === "finale" ? "Finale" : `Ep ${e.number}`}</span>
-                <Pill>{e.phase}</Pill>
+                <StatusBadge>{e.phase}</StatusBadge>
                 <PolicyPill episode={e} />
-                <Pill tone={stateTone[e.state]}>{stateLabel[e.state]}</Pill>
+                <StatusBadge tone={stateTone[e.state]}>{stateLabel[e.state]}</StatusBadge>
               </div>
               {e.state === "PUBLISHED" ? (
                 <span className="flex gap-4 text-sm font-semibold">
@@ -176,7 +176,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
 
       {season.status === "ACTIVE" && allPublished ? (
         <Card className="mt-8 p-4">
-          <SectionTitle>Finish the season</SectionTitle>
+          <SectionHeader>Finish the season</SectionHeader>
           <p className="mb-3 text-sm text-muted">The final episode is published. Finalizing moves the season to the archive as read-only history.{season.wagerState === "LOCKED" ? " It also settles every wager and reveals who picked whom." : season.wagerState === "OPEN" ? " Lock wagering first." : ""}</p>
           <ActionForm action={finalizeSeasonAction} submit="Finalize and archive" confirm="Finalize this season? It becomes read-only.">
             <input type="hidden" name="seasonId" value={season.id} />

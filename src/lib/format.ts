@@ -7,3 +7,7 @@ export const episodeLabel = (season: { episodes: { number: number; phase: string
   season.episodes.find((e) => e.number === n)?.phase === "finale" ? "Finale" : `Ep ${n}`;
 
 export const seasonPath = (seasonId: string, path = "") => `/${seasonId}${path}`;
+
+export const seasonStatusLabel = { SETUP: "Setting up", OPENING_SELECTION: "Draft live", ACTIVE: "In progress", ARCHIVED: "Final" } as const;
+
+export const phaseLabel = { "pre-merge": "Pre-merge", "post-merge": "Post-merge", finale: "Finale" } as const;
