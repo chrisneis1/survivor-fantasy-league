@@ -56,3 +56,19 @@ test("wagering auto-locks when the deadline episode is published and can't be re
   assert.throws(() => openWagers(s, "t"), /can't be opened/);
   assert.match(wagerProblem(s, "b", 5) ?? "", /isn't open/);
 });
+
+test("two castaways can't both be scored as the season winner", () => {
+  let s = createSeason(ref, "win-51", "Win 51");
+  s.castaways = ["a", "b"].map((id, i) => ({ id, name: id, initialTribeId: "cila", order: i + 1 }));
+  s.teams = [{ id: "x", member: "x", name: "x", draft: ["a"] }];
+  s.slots = [{ id: "s1", name: "S1", restrictionTribeId: null, enforceOnSwap: false }];
+  s.config.openingSeed = ["x"];
+  s.status = "ACTIVE";
+  s.episodes = s.episodes.slice(0, 1);
+  s.episodes[0].phase = "finale";
+  const rule = s.config.wager.winnerRule;
+  const both = saveDraft(s, { episode: 1, rows: [{ castaway: "a", inputs: { [rule]: { on: true } } }, { castaway: "b", inputs: { [rule]: { on: true } } }] }, at);
+  assert.throws(() => publishEpisode(both, 1, "t"), /Only one castaway can win/);
+  const one = saveDraft(s, { episode: 1, rows: [{ castaway: "a", inputs: { [rule]: { on: true } } }] }, at);
+  assert.equal(publishEpisode(one, 1, "t").season.episodes[0].state, "PUBLISHED");
+});

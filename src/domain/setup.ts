@@ -217,7 +217,7 @@ export function finalizeSeason(season: Season, actor: string, wagers: WagerEntry
   let winner: string | null = null;
   if (season.wagerState === "LOCKED") {
     winner = findWinner(season);
-    if (!winner) throw new Error("Score the Sole Survivor in the finale first, so wagers can be settled.");
+    if (!winner) throw new Error("Score exactly one Sole Survivor in the finale first, so wagers can be settled.");
     next.wagers = resolveWagers(next, wagers, winner);
   }
   next.status = "ARCHIVED";

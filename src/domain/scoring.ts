@@ -138,6 +138,11 @@ export function validatePublish(season: Season, episode: number): string[] {
     }
   }
 
+  // The season has one winner: never let two castaways both be scored as the Sole Survivor.
+  const winnerRule = season.config.wager.winnerRule;
+  const winners = (draft?.rows ?? []).filter((r) => resolveRow(season, ep.phase, r).entries.some((e) => e.rule === winnerRule));
+  if (winners.length > 1) errors.push(`Only one castaway can win the season, but ${winners.length} are scored that way.`);
+
   // The roster resolver must succeed and be complete for every team under this episode's policy — except an
   // episode excluded from standings, which is never attributed to any team's roster in the first place.
   if (!ep.excludeFromStandings) {

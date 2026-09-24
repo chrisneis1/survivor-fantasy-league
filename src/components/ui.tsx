@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Castaway, Episode, Season } from "@/domain/types";
 import { signed } from "@/lib/format";
+import { currentTribeId, latestPublished } from "@/domain/engine";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <section className={`rounded-2xl border border-line bg-surface ${className}`}>{children}</section>;
@@ -56,7 +57,9 @@ export function Signed({ n, className = "" }: { n: number; className?: string })
 }
 
 export function TribeTag({ season, castaway, tribeId }: { season: Season; castaway?: Castaway; tribeId?: string }) {
-  const tribe = season.tribes.find((t) => t.id === (tribeId ?? castaway?.initialTribeId));
+  // Shows where the castaway is now (after any swaps or the merge); the draft slot rules still use their starting tribe.
+  const now = castaway ? currentTribeId(season, castaway.id, Math.max(latestPublished(season), 1)) : undefined;
+  const tribe = season.tribes.find((t) => t.id === (tribeId ?? now));
   if (!tribe) return null;
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
