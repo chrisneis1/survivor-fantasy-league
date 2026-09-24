@@ -147,6 +147,8 @@ export interface WagerConfig {
   wrongMultiplier: number;
   /** The scoring rule whose entry marks the season's winner. */
   winnerRule: string;
+  /** Wagering closes for good once this episode is published (default 2). */
+  lockAtEpisode?: number;
 }
 
 export interface SeasonConfig {

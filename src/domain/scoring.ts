@@ -176,10 +176,13 @@ export function publishEpisode(season: Season, episode: number, actor: string): 
   }
   next.drafts = next.drafts.filter((d) => d.episode !== episode);
   ep.state = "PUBLISHED";
-  return {
-    season: next,
-    audit: [{ seasonId: season.id, actor, entityType: "episode", entityId: String(episode), action: "PUBLISH", after: { scoredCastaways: publishedRows.length, exits: draft.rows.filter((r) => r.exit).length } }],
-  };
+  const audit: AuditEvent[] = [{ seasonId: season.id, actor, entityType: "episode", entityId: String(episode), action: "PUBLISH", after: { scoredCastaways: publishedRows.length, exits: draft.rows.filter((r) => r.exit).length } }];
+  // Wagering closes by itself once the deadline episode is scored.
+  if (next.wagerState === "OPEN" && episode >= (next.config.wager.lockAtEpisode ?? 2)) {
+    next.wagerState = "LOCKED";
+    audit.push({ seasonId: season.id, actor, entityType: "wager", entityId: season.id, action: "AUTO_LOCK" });
+  }
+  return { season: next, audit };
 }
 
 // ---------- corrections (guide §8.4) ----------

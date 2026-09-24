@@ -97,6 +97,7 @@ test("settlement is 1:1: a correct pick gains the stake, a wrong pick loses it, 
 
 test("finalize needs wagering locked and a scored winner, then settles every pick", () => {
   let s = finished();
+  s.config.wager.lockAtEpisode = 99; // this fixture opens wagering after the season is fully scored
   s = openWagers({ ...s }, "t").season;
   assert.throws(() => finalizeSeason(s, "t", []), /Lock wagering/);
   s = lockWagers(s, "t").season;

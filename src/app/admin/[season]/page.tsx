@@ -1,3 +1,4 @@
+import { wagerDeadlineEpisode, wagerDeadlinePassed } from "@/domain/wager";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
@@ -115,7 +116,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
         <Card className="mb-8 p-4">
           <SectionTitle aside={<Pill tone={season.wagerState === "OPEN" ? "accent" : season.wagerState === "LOCKED" ? "good" : "neutral"}>{season.wagerState === "OFF" ? "Not started" : season.wagerState === "OPEN" ? "Open" : "Locked"}</Pill>}>Final wager</SectionTitle>
           <p className="mb-3 text-sm text-muted">
-            Each member secretly backs a winner and wagers {season.config.wager.minStake}–{season.config.wager.maxStake} points at {season.config.wager.correctMultiplier}:{season.config.wager.wrongMultiplier}. Picks stay hidden from everyone, including you, until you finalize the season.
+            Each member secretly backs a winner and wagers {season.config.wager.minStake}–{season.config.wager.maxStake} points at {season.config.wager.correctMultiplier}:{season.config.wager.wrongMultiplier}. Picks stay hidden from everyone, including you, until you finalize the season. Wagering closes by itself once Episode {wagerDeadlineEpisode(season)} is scored.
           </p>
           {season.wagerState !== "OFF" ? <p className="mb-3 text-sm"><strong>{wagered}</strong> of {season.teams.length} teams have placed a wager.</p> : null}
           {season.wagerState === "OFF" ? (
@@ -126,6 +127,8 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
             <ActionForm action={lockWagersAction} submit="Lock wagering" ghost confirm="Lock wagering? Members can no longer place or change a wager.">
               <input type="hidden" name="seasonId" value={season.id} />
             </ActionForm>
+          ) : wagerDeadlinePassed(season) ? (
+            <p className="text-sm text-muted">Wagering closed automatically when Episode {wagerDeadlineEpisode(season)} was scored, and can&apos;t be reopened.</p>
           ) : (
             <ActionForm action={openWagersAction} submit="Reopen wagering" ghost confirm="Reopen wagering so members can change their wager again?">
               <input type="hidden" name="seasonId" value={season.id} />

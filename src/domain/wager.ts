@@ -14,6 +14,12 @@ export interface WagerEntry {
 type Result = { season: Season; audit: AuditEvent[] };
 const ev = (s: Season, actor: string, action: string): AuditEvent => ({ seasonId: s.id, actor, entityType: "wager", entityId: s.id, action });
 
+/** The episode whose publication closes wagering. */
+export const wagerDeadlineEpisode = (season: Season) => season.config.wager.lockAtEpisode ?? 2;
+
+/** True once the deadline episode is published: wagers can no longer be opened or changed. */
+export const wagerDeadlinePassed = (season: Season) => latestPublished(season) >= wagerDeadlineEpisode(season);
+
 /** Castaways a member may still back: those in the game for the next episode to be scored. */
 export function wagerCandidates(season: Season): Castaway[] {
   const next = latestPublished(season) + 1;
@@ -24,6 +30,7 @@ export function wagerCandidates(season: Season): Castaway[] {
 export function wagerProblem(season: Season, castawayId: string, stake: number): string | null {
   const w = season.config.wager;
   if (season.wagerState !== "OPEN") return "Wagering isn't open.";
+  if (wagerDeadlinePassed(season)) return `Wagering closed when Episode ${wagerDeadlineEpisode(season)} was scored.`;
   if (!Number.isInteger(stake) || stake < w.minStake || stake > w.maxStake) return `Stake a whole number of points from ${w.minStake} to ${w.maxStake}.`;
   if (!wagerCandidates(season).some((c) => c.id === castawayId)) return "That castaway isn't in the game any more.";
   return null;
@@ -32,6 +39,7 @@ export function wagerProblem(season: Season, castawayId: string, stake: number):
 export function openWagers(season: Season, actor: string): Result {
   if (season.status !== "ACTIVE") throw new Error("Wagering can open once the season is active.");
   if (season.wagerState === "OPEN") throw new Error("Wagering is already open.");
+  if (wagerDeadlinePassed(season)) throw new Error(`Wagering closed when Episode ${wagerDeadlineEpisode(season)} was scored, so it can't be opened now.`);
   const next = structuredClone(season);
   next.wagerState = "OPEN";
   return { season: next, audit: [ev(season, actor, season.wagerState === "LOCKED" ? "REOPEN" : "OPEN")] };

@@ -11,7 +11,7 @@ import { currentTurn, openWindow, openingSequence, openingTurn, picksRemaining }
 import { episodeLabel, plural, seasonPath } from "@/lib/format";
 import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, teamOf } from "@/lib/view";
-import { wagerCandidates } from "@/domain/wager";
+import { wagerCandidates, wagerDeadlineEpisode } from "@/domain/wager";
 import { store } from "@/server";
 import { placeWagerAction, renameMyTeamAction, userSignOutAction } from "@/server/actions";
 import { getMember, getUser } from "@/server/auth";
@@ -172,7 +172,7 @@ async function WagerCard({ season, teamId }: { season: Season; teamId: string })
       <SectionTitle aside={<Pill tone={open ? "accent" : "neutral"}>{open ? "Open" : "Locked"}</Pill>}>Final wager</SectionTitle>
       <Card className="p-4">
         <p className="mb-3 text-sm text-muted">
-          Back the castaway you think will win the season and wager {w.minStake}–{w.maxStake} points. If you&apos;re right you gain what you wagered; if you&apos;re wrong you lose it. Everyone&apos;s pick is hidden from everyone, including the commissioner, until the season ends.
+          Back the castaway you think will win the season and wager {w.minStake}–{w.maxStake} points. If you&apos;re right you gain what you wagered; if you&apos;re wrong you lose it. Everyone&apos;s pick is hidden from everyone, including the commissioner, until the season ends.{open ? ` Wagering closes automatically once Episode ${wagerDeadlineEpisode(season)} is scored.` : ""}
         </p>
         {mine ? (
           <p className="mb-3 rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-sm">

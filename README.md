@@ -60,6 +60,7 @@ npm run import:season -- "C:/path/to/Survivor 50.xlsx"   # rebuild src/data/seas
 ## Phase 5: the final wager
 
 - **Rules:** each member backs one castaway to win and wagers 1–30 points. A correct pick gains the stake and a wrong pick loses it (1:1). Someone who doesn't wager is unchanged. The minimum, maximum and multipliers are season settings.
+- **Deadline:** wagering closes automatically when Episode 2 is published (season setting `lockAtEpisode`, default 2), and can't be reopened after that. Members see the deadline on their wager card.
 - **Secret until the season ends.** Picks are stored in their own table, not in the season document, so no public page, standings view or commissioner screen can show them. The commissioner sees only how many teams have wagered (and, on Members, which have), never who picked whom. The audit log records that a team placed a wager, not what it is. The one and only reader of every pick is *finalize*, which settles the wagers and writes the results into the season (shown as the "After wager" leaderboard view and on team pages).
 - **The commissioner runs it:** open wagering, lock it, then finalize. Finalize refuses to run while wagering is open, or if no Sole Survivor has been scored in the finale.
 - Members place or change their wager on **My Team** while wagering is open. Only castaways still in the game can be backed, and every rule is re-checked on the server inside the write.

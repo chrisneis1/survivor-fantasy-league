@@ -36,3 +36,23 @@ test("this episode's losers pick before earlier skips, each group lowest points 
   // y (lost c2, 0 pts) then z (lost c3, 3 pts); x's open slot is a leftover skip, so it goes last.
   assert.deepEqual(q, ["y", "z", "x"]);
 });
+
+test("wagering auto-locks when the deadline episode is published and can't be reopened", async () => {
+  const { openWagers, wagerProblem, wagerDeadlinePassed } = await import("../src/domain/wager");
+  let s = createSeason(ref, "wager-51", "Wager 51");
+  s.castaways = ["a", "b"].map((id, i) => ({ id, name: id, initialTribeId: "cila", order: i + 1 }));
+  s.teams = [{ id: "x", member: "x", name: "x", draft: ["a"] }];
+  s.slots = [{ id: "s1", name: "S1", restrictionTribeId: null, enforceOnSwap: false }];
+  s.config.openingSeed = ["x"];
+  s.status = "ACTIVE";
+  s.episodes = s.episodes.slice(0, 4);
+  s = openWagers(s, "t").season;
+  s = publishEpisode(saveDraft(s, { episode: 1, rows: [{ castaway: "a", inputs: {} }] }, at), 1, "t").season;
+  assert.equal(s.wagerState, "OPEN", "still open after episode 1");
+  assert.equal(wagerProblem(s, "b", 5), null);
+  s = publishEpisode(saveDraft(s, { episode: 2, rows: [{ castaway: "a", inputs: {} }] }, at), 2, "t").season;
+  assert.equal(s.wagerState, "LOCKED");
+  assert.ok(wagerDeadlinePassed(s));
+  assert.throws(() => openWagers(s, "t"), /can't be opened/);
+  assert.match(wagerProblem(s, "b", 5) ?? "", /isn't open/);
+});
