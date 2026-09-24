@@ -8,6 +8,7 @@
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
     "import:season": "node scripts/import-reference-season.mjs",
+    "import:archive": "node scripts/import-archive.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -102,7 +102,11 @@ export function teamEpisodeScore(season: Season, teamId: string, episode: number
   // An episode scored before any team has a roster (e.g. a premiere aired before the draft) never contributes,
   // regardless of what a roster resolver would return for it now or later.
   if (ep?.excludeFromStandings) return 0;
-  return rosterForEpisode(season, teamId, episode).reduce((sum, c) => sum + castawayEpisodeTotal(season, c, episode), 0);
+  // An archived season whose sheet kept team totals but not weekly rosters: its recorded scores are official.
+  const recorded = season.archive?.teamScores?.[teamId];
+  if (recorded) return recorded[season.episodes.findIndex((e) => e.number === episode)] ?? 0;
+  const swapCosts = season.transactions.reduce((sum, t) => sum + (t.team === teamId && t.effectiveEpisode === episode ? (t.cost ?? 0) : 0), 0);
+  return rosterForEpisode(season, teamId, episode).reduce((sum, c) => sum + castawayEpisodeTotal(season, c, episode), 0) - swapCosts;
 }
 
 // ---------- standings ----------

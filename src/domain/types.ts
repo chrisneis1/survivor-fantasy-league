@@ -113,6 +113,8 @@ export interface Transaction {
   date?: string;
   free?: boolean;
   note?: string;
+  /** Points the team gave up for making this swap, taken off its score in the effective episode (archived seasons). */
+  cost?: number;
   /** When the pick was made (ISO); archived picks only have `date`. */
   at?: string;
   by?: string;
@@ -195,6 +197,8 @@ export interface Season {
   drafts: EpisodeDraft[];
   /** Post-publication score corrections, oldest first. */
   corrections: Correction[];
+  /** Set on seasons imported into the archive from an old spreadsheet. */
+  archive?: SeasonArchive;
   /** The source workbook's own numbers, kept only as a regression fixture. */
   reference: {
     teamWeek: number[][];
@@ -202,6 +206,17 @@ export interface Season {
     ranks: Record<string, number>;
     rosters: string[][][];
   };
+}
+
+/** Where an archived season's record came from, and what its spreadsheet couldn't keep. */
+export interface SeasonArchive {
+  /** Plain-language notes shown on the season's pages. */
+  notes: string[];
+  /**
+   * Each team's official score per episode (in episode order), for sheets that kept team totals but not who was on
+   * each roster week to week. When present, team scores come from here instead of from rosters.
+   */
+  teamScores?: Record<string, number[]>;
 }
 
 // ---------- derived views ----------
