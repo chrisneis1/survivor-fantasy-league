@@ -9,7 +9,7 @@ import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTi
 import { addRule, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
 import { lockWagers, openWagers, wagerProblem } from "@/domain/wager";
-import { type Access, getMember, requireAccess, requireAdmin, signIn, signInUser, signOut, signOutUser, signUp } from "./auth";
+import { type Access, changeOwnPassword, getMember, requireAccess, requireAdmin, resetUserPassword, signIn, signInUser, signOut, signOutUser, signUp } from "./auth";
 import { store } from "./index";
 import { ConflictError } from "./store";
 
@@ -557,6 +557,26 @@ export async function setUserAdminAction(_: ActionState, fd: FormData): Promise<
   await store().setUserAdmin(userId, on);
   revalidatePath("/", "layout");
   return { ok: on ? "Granted site admin." : "Site admin removed." };
+}
+
+/**
+ * Admin-only: sets a temporary password for a player who forgot theirs, and signs that account out everywhere.
+ * The password is never echoed back or logged. Account changes aren't season-scoped, so like setUserAdminAction this
+ * writes no audit row (the audit log is per season).
+ */
+export async function resetUserPasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const r = await resetUserPassword(str(fd, "userId"), str(fd, "password"));
+  if (!r.ok) return { error: r.error };
+  return { ok: `Password reset for ${r.username}. Give them the temporary password you just typed so they can sign in, then have them change it from My Team.` };
+}
+
+/** A signed-in player changes their own password. Other devices are signed out; this one stays signed in. */
+export async function changeMyPasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  if (str(fd, "password") !== str(fd, "confirm")) return { error: "The new passwords don't match." };
+  const r = await changeOwnPassword(str(fd, "current"), str(fd, "password"));
+  if (!r.ok) return { error: r.error };
+  return { ok: "Password changed. Any other device signed in as you has been signed out." };
 }
 
 /** Assigns an existing account to run a team for this season, replacing whoever held it. */

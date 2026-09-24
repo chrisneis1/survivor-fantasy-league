@@ -242,6 +242,17 @@ export function createStore(client: Client, seed: Season[] = []) {
       await client.execute({ sql: "UPDATE app_user SET is_admin = ? WHERE id = ?", args: [on ? 1 : 0, userId] });
     },
 
+    /**
+     * Replaces an account's password hash and rotates its session key in the same statement, so every device signed
+     * in with the old password is signed out. Returns the new session key, or null if there is no such account.
+     */
+    async setUserPassword(userId: string, passwordHash: string): Promise<string | null> {
+      await ensure();
+      const sessionKey = randomBytes(12).toString("base64url");
+      const res = await client.execute({ sql: "UPDATE app_user SET password_hash = ?, session_key = ? WHERE id = ?", args: [passwordHash, sessionKey, userId] });
+      return res.rowsAffected === 1 ? sessionKey : null;
+    },
+
     // ---------- season membership: which user occupies which team ----------
 
     /**

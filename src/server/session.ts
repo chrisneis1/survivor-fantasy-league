@@ -52,6 +52,9 @@ export function createLimiter(max = 5, windowMs = 15 * 60 * 1000) {
 // scrypt, not the fast SHA-256 used for the admin passcode/invite hashes above: a member-chosen password has much
 // lower entropy, so the hash needs to be deliberately slow to brute-force.
 
+/** Sign-up, a password change and an admin reset all share this minimum. */
+export const MIN_PASSWORD_LENGTH = 4;
+
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);
   const hash = scryptSync(password, salt, 64);
