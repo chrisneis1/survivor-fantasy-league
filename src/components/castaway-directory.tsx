@@ -15,6 +15,8 @@ export interface DirectoryCastaway {
   owners: number;
   cap: number;
   drafted: number;
+  /** Replaces the "drafted by · peak" line, for archived seasons that only kept final rosters. */
+  ownershipNote?: string;
   peak: number;
   /** e.g. "Voted out · Ep 5"; absent while still in the game. */
   out?: string;
@@ -125,7 +127,7 @@ export function CastawayDirectory({ castaways, tribes, initialTribe = "all", fin
                   </span>
                   <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
                     <OwnershipMeter owners={c.owners} cap={c.cap} />
-                    <span className="num text-xs text-muted">Drafted by {c.drafted} · peak {c.peak}</span>
+                    <span className="num text-xs text-muted">{c.ownershipNote ?? `Drafted by ${c.drafted} · peak ${c.peak}`}</span>
                   </div>
                 </div>
               </Link>

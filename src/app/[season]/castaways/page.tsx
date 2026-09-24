@@ -32,6 +32,7 @@ export default async function Castaways({ params, searchParams }: { params: Prom
       owners: season.episodes.length ? ownerCount(season, c.id, nowEp) : 0,
       cap,
       drafted: season.teams.filter((t) => t.draft.includes(c.id)).length,
+      ...(season.archive?.finalRostersOnly ? { ownershipNote: `On ${season.teams.filter((t) => t.draft.includes(c.id)).length} final rosters` } : {}),
       peak: season.episodes.length ? Math.max(...season.episodes.map((e) => ownerCount(season, c.id, e.number))) : 0,
       out: exit ? `${exitLabel(exit)} · ${episodeLabel(season, exit.afterEpisode)}` : undefined,
     };

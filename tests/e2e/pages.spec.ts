@@ -23,6 +23,19 @@ const pages: { path: string; heading: string | RegExp; text?: string }[] = [
   { path: "/survivor-50/episodes/14", heading: "Finale" },
   { path: "/survivor-50/rules", heading: "League rules", text: "Scoring" },
 
+  // The Hall of Fame, and past seasons imported from the league's old spreadsheets.
+  { path: "/hall-of-fame", heading: "Hall of Fame", text: "All-time table" },
+  { path: "/hall-of-fame/shane", heading: "Shane", text: "Season by season" },
+  { path: "/survivor-44", heading: "Leaderboard", text: "About this season's record" },
+  { path: "/survivor-44/teams/shane", heading: "Back2Back", text: "Final roster" },
+  { path: "/survivor-44/castaways", heading: "Castaways", text: "final rosters" },
+  { path: "/survivor-43/castaways/owen", heading: "Owen", text: "Won fire-making" },
+  { path: "/survivor-43/teams/jon", heading: "Jon's Team", text: "Swap cost 8 points" },
+  { path: "/survivor-46?view=wager", heading: "Final standings after wagers", text: "Final adjustment" },
+  { path: "/survivor-47/teams/christian", heading: "Blindsides & Beefcakes", text: "Voluntary swap: cost 2 points" },
+  { path: "/survivor-48/this-week", heading: /After/ },
+  { path: "/survivor-45/rules", heading: "League rules", text: "Survive Tribal Council" },
+
   // A season in progress with a pick window open.
   { path: "/demo-active", heading: "Standings after Ep 7" },
   { path: "/demo-active/this-week", heading: "After Ep 7", text: "Window open" },

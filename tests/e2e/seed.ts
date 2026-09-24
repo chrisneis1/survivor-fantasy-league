@@ -1,11 +1,13 @@
 // Builds the throwaway database the page tests run against (never production: only a local file: URL is accepted).
 //   npx tsx tests/e2e/seed.ts .e2e/league.db
-// Seasons: the bundled archived Survivor 50; "demo-active", a copy cut back to Episode 7 with a pick window open and
+// Seasons: the bundled archived Survivor 43–48 and 50 (49 is left out, for the commissioner's "Add past seasons"
+// button to add); "demo-active", a copy cut back to Episode 7 with a pick window open and
 // the test player up next; "survivor-51", a new season still in setup with no teams or cast; and "draft-demo", an
 // opening draft three picks in.
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { createClient } from "@libsql/client";
+import { bundledSeasons } from "../../src/data/archive";
 import survivor50 from "../../src/data/seasons/survivor-50.json";
 import { currentTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingBlock, openingTurn, replaceableSlots, replacementCheck } from "../../src/domain/picks";
 import { createSeason } from "../../src/domain/setup";
@@ -23,7 +25,7 @@ async function main() {
   for (const f of [file, `${file}-wal`, `${file}-shm`, `${file}-journal`]) rmSync(f, { force: true });
 
   const ref = survivor50 as unknown as Season;
-  const store = createStore(createClient({ url: `file:${file}` }), [ref]);
+  const store = createStore(createClient({ url: `file:${file}` }), bundledSeasons.filter((s) => s.id !== "survivor-49"));
   await store.list();
 
   let s: Season = structuredClone(ref);

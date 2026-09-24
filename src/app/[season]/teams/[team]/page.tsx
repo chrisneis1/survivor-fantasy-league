@@ -6,7 +6,7 @@ import { RosterSlot, SwapLine } from "@/components/league";
 import { SeasonShell } from "@/components/shell";
 import { Card, EmptyState, Monogram, PageHeader, PolicyPill, RankBadge, ScoreChange, SectionHeader, StatCard, StatusBadge, YouBadge } from "@/components/ui";
 import { getSeason } from "@/data";
-import { castawayEpisodeTotal, currentTribeId, effectiveRoster, isActiveAt, latestPublished, rosterForEpisode, standings, statusEventFor } from "@/domain/engine";
+import { castawayEpisodeTotal, castawaySeasonTotal, currentTribeId, effectiveRoster, isActiveAt, latestPublished, rosterForEpisode, standings, statusEventFor, teamEpisodeScore } from "@/domain/engine";
 import { episodeLabel, seasonPath } from "@/lib/format";
 import { castawayName, exitLabel } from "@/lib/view";
 import { getMember } from "@/server/auth";
@@ -26,13 +26,20 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
     .filter((t) => t.team === team.id)
     .sort((a, b) => a.windowAfterEpisode - b.windowAfterEpisode || (a.order ?? 0) - (b.order ?? 0));
 
-  // Points come from the roster that actually scored each episode, per that episode's roster policy.
-  const perEpisode = season.episodes.filter((e) => e.state === "PUBLISHED").map((e) => ({
-    e,
-    roster: rosterForEpisode(season, team.id, e.number).map((c) => ({ id: c, pts: castawayEpisodeTotal(season, c, e.number) })),
-  }));
+  // Points come from the roster that actually scored each episode, per that episode's roster policy. An archived
+  // season whose sheet kept only final rosters has no weekly roster to show, just the team's recorded score.
+  const finalOnly = !!season.archive?.finalRostersOnly;
+  const perEpisode = season.episodes.filter((e) => e.state === "PUBLISHED").map((e) => {
+    const roster = finalOnly ? [] : rosterForEpisode(season, team.id, e.number).map((c) => ({ id: c, pts: castawayEpisodeTotal(season, c, e.number) }));
+    const score = teamEpisodeScore(season, team.id, e.number);
+    const cost = txs.reduce((sum, t) => sum + (t.effectiveEpisode === e.number ? (t.cost ?? 0) : 0), 0);
+    // Whatever the castaways' points don't account for: a swap's cost, or an adjustment an old sheet recorded.
+    const other = finalOnly ? 0 : score - roster.reduce((sum, r) => sum + r.pts, 0);
+    return { e, roster, score, other, otherLabel: cost && other === -cost ? "Swap cost" : "Recorded adjustment" };
+  });
   const current = effectiveRoster(season, team.id, last);
   const slotPoints = (slot: number) => perEpisode.reduce((sum, pe) => sum + (pe.roster[slot]?.pts ?? 0), 0);
+  const rosterPoints = (slot: number, castaway: string) => (finalOnly ? castawaySeasonTotal(season, castaway, published) : slotPoints(slot));
   const draftEpisodes = season.episodes.filter((e) => e.rosterPolicy === "ORIGINAL_DRAFT");
   const tribeEp = Math.max(published, 1);
 
@@ -59,12 +66,14 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
       <div className="-mt-4 mb-8 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <StatCard tone={row.rank === 1 && published ? "sand" : "default"} label="Rank" value={published ? <span className="flex items-center gap-2"><RankBadge rank={row.rank} tied={row.tied} size="sm" onSand={row.rank === 1} />{row.tied ? "Tied" : ""}</span> : "—"} sub={`of ${season.teams.length} teams`} />
         <StatCard label="Points" value={published ? row.total : "—"} sub={published ? `through ${episodeLabel(season, published)}` : "No episodes scored"} />
-        <StatCard label="Swaps" value={txs.length} sub={season.config.swapCreditLimit === null ? "roster replacements" : `of ${season.config.swapCreditLimit} credits`} />
+        <StatCard label="Swaps" value={finalOnly ? "—" : txs.length} sub={finalOnly ? "not recorded" : season.config.swapCreditLimit === null ? "roster replacements" : `of ${season.config.swapCreditLimit} credits`} />
         <StatCard label="Best episode" value={best === null ? "—" : <ScoreChange n={best} />} sub={bestEp ? episodeLabel(season, bestEp) : "—"} />
       </div>
 
       <section aria-labelledby="roster-title">
-        <SectionHeader id="roster-title" aside={draftEpisodes.length ? `Original draft scored from ${episodeLabel(season, draftEpisodes[0].number)}` : undefined}>Roster</SectionHeader>
+        <SectionHeader id="roster-title" aside={finalOnly ? "As the season ended — weekly rosters weren't recorded" : draftEpisodes.length ? `Original draft scored from ${episodeLabel(season, draftEpisodes[0].number)}` : undefined}>
+          {finalOnly ? "Final roster" : "Roster"}
+        </SectionHeader>
         <ul className="grid grid-cols-[minmax(0,1fr)] gap-2.5 sm:grid-cols-2">
           {season.slots.map((slot, i) => {
             const cid = current[i];
@@ -80,8 +89,8 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
                   href={seasonPath(season.id, `/castaways/${cid}`)}
                   tribe={tribe}
                   out={exit && !isActiveAt(season, cid, last + 1) ? `${exitLabel(exit)} after ${episodeLabel(season, exit.afterEpisode)}` : undefined}
-                  points={slotPoints(i)}
-                  pointsLabel="from this slot"
+                  points={rosterPoints(i, cid)}
+                  pointsLabel={finalOnly ? "castaway's season" : "from this slot"}
                 />
               </li>
             );
@@ -99,8 +108,7 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
               <EpisodeBars items={scores.map((v, i) => ({ label: season.episodes[i]?.phase === "finale" ? "F" : String(i + 1), value: v, highlight: i + 1 === bestEp }))} />
             </Card>
             <ol className="grid gap-1.5">
-              {perEpisode.map(({ e, roster }, idx) => {
-                const score = roster.reduce((s, r) => s + r.pts, 0);
+              {perEpisode.map(({ e, roster, score, other, otherLabel }, idx) => {
                 const swapped = txs.filter((t) => t.effectiveEpisode === e.number);
                 return (
                   <li key={e.id}>
@@ -116,6 +124,7 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
                         <IconChevronDown size={16} className="text-muted transition-transform group-open:rotate-180" />
                       </summary>
                       <div className="border-t border-line px-3 pb-3 pt-2 sm:px-4">
+                        {finalOnly ? <p className="py-1 text-sm text-muted">The sheet kept this team&apos;s score for each episode but not who was on the roster that week.</p> : null}
                         <ul className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                           {roster.map((r, i) => (
                             <li key={i} className="flex items-center justify-between gap-2 py-0.5">
@@ -126,6 +135,12 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
                               <ScoreChange n={r.pts} className="font-semibold" />
                             </li>
                           ))}
+                          {other ? (
+                            <li className="flex items-center justify-between gap-2 py-0.5">
+                              <span className="truncate text-ink-2">{otherLabel}</span>
+                              <ScoreChange n={other} className="font-semibold" />
+                            </li>
+                          ) : null}
                         </ul>
                         <Link href={seasonPath(season.id, `/episodes/${e.number}`)} className="mt-2 inline-block text-xs font-semibold text-accent hover:underline">
                           {episodeLabel(season, e.number)} recap →
@@ -145,7 +160,7 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
         <ol className="relative ml-3 border-l-2 border-line pl-6">
           <li className="relative mb-5">
             <span aria-hidden className="absolute -left-[33px] top-0.5 grid size-4 place-items-center rounded-full border-2 border-accent bg-bg" />
-            <p className="eyebrow text-accent">Opening draft</p>
+            <p className="eyebrow text-accent">{finalOnly ? "Final picks" : "Opening draft"}</p>
             <ul className="mt-1.5 flex flex-wrap gap-1.5">
               {team.draft.map((c, i) => (
                 <li key={i} className="rounded-lg border border-line bg-surface px-2 py-1 text-sm">
@@ -170,6 +185,11 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
               <span aria-hidden className="absolute -left-[33px] top-0.5 grid size-4 place-items-center rounded-full border-2 border-accent bg-bg" />
               <p className="eyebrow text-accent">Back to the original draft</p>
               <p className="mt-1 text-sm text-ink-2">From {episodeLabel(season, draftEpisodes[0].number)} the league scores every team&apos;s opening roster, so swaps no longer count.</p>
+            </li>
+          ) : finalOnly ? (
+            <li className="relative text-sm text-muted">
+              <span aria-hidden className="absolute -left-[31px] top-1 size-3 rounded-full bg-line ring-4 ring-bg" />
+              The sheet for this season didn&apos;t keep the opening draft or the swaps, only the final picks.
             </li>
           ) : txs.length === 0 ? (
             <li className="relative text-sm text-muted">

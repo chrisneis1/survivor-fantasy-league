@@ -4,6 +4,7 @@ import { SiteShell, statusTone } from "@/components/shell";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import { allSeasons } from "@/data";
 import { latestPublished, standings } from "@/domain/engine";
+import { finalStandings } from "@/domain/history";
 import type { Season } from "@/domain/types";
 import { episodeLabel, seasonPath, seasonStatusLabel } from "@/lib/format";
 
@@ -18,6 +19,15 @@ export default async function Archive() {
       <PageHeader eyebrow="League history" title="Seasons">
         Completed seasons are read-only and stay available while the next one is set up.
       </PageHeader>
+      <Link href="/hall-of-fame" className="group mb-8 flex items-center gap-3 rounded-[var(--radius-card)] border border-sand-line bg-sand px-4 py-3 text-sand-ink shadow-raised transition-transform hover:-translate-y-0.5">
+        <IconTrophy size={22} className="shrink-0" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">Hall of Fame</span>
+          <span className="block truncate text-sm text-sand-muted">Every champion, and every member&apos;s record across the seasons.</span>
+        </span>
+        <IconArrowRight size={18} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
+      </Link>
+
       {seasons.length === 0 ? (
         <EmptyState icon={<IconArchive size={22} />} title="No seasons yet">The first season appears here once the commissioner creates it.</EmptyState>
       ) : null}
@@ -76,7 +86,7 @@ function CurrentCard({ season: s }: { season: Season }) {
 }
 
 function ChampionCard({ season: s }: { season: Season }) {
-  const top = standings(s)[0];
+  const top = finalStandings(s)[0];
   const winner = top ? s.teams.find((t) => t.id === top.teamId) : undefined;
   return (
     <li>
