@@ -39,12 +39,13 @@ export default async function DraftBoard({ params }: { params: Promise<{ season:
       {turn ? (
         <div className="mb-8">
           <p className="mb-1 text-sm font-semibold uppercase tracking-widest text-accent">Pick {turn.index + 1} of {turn.total} · Round {turn.round}</p>
-          <h1 className="display text-4xl font-extrabold leading-tight sm:text-6xl">{teamOf(season, turn.teamId).member}</h1>
+          <h1 className="display text-4xl font-extrabold uppercase leading-tight sm:text-6xl">{teamOf(season, turn.teamId).member}</h1>
           <p className="mt-1 text-muted">is up — {teamOf(season, turn.teamId).name}. Click a castaway below to fill a slot.</p>
         </div>
       ) : (
         <Card className="mb-8 p-8 text-center">
-          <p className="display text-4xl font-extrabold text-good">Draft complete!</p>
+          <p className="eyebrow mb-1 text-muted">{season.name} · Draft board</p>
+          <h1 className="display text-4xl font-extrabold uppercase text-good">Draft complete!</h1>
           <p className="mt-2 text-muted">Every team has a full roster. <Link href={`/admin/${season.id}`} className="text-accent hover:underline">Back to Overview</Link> to keep setting up episodes, or open This Week once an episode is scored.</p>
         </Card>
       )}
@@ -62,7 +63,27 @@ export default async function DraftBoard({ params }: { params: Promise<{ season:
 
       <section>
         <h2 className="mb-3 text-lg font-bold">Draft board</h2>
-        <div className="overflow-x-auto rounded-2xl border border-line">
+        {/* Phones: one row per team with its picks so far, instead of a sideways-scrolling table. */}
+        <ul className="grid gap-2 md:hidden">
+          {order.map((teamId) => {
+            const t = teamOf(season, teamId);
+            const isUp = turn?.teamId === teamId;
+            return (
+              <li key={teamId} className={`rounded-xl border px-3 py-2.5 ${isUp ? "border-accent/60 bg-accent/10" : "border-line bg-surface"}`}>
+                <p className="font-semibold">{isUp ? <span className="text-accent">▶ </span> : null}{t.member}</p>
+                <ul className="mt-1 flex flex-wrap gap-1.5 text-sm">
+                  {season.slots.map((sl, i) => (
+                    <li key={sl.id} className="rounded-lg border border-line bg-surface-2 px-2 py-0.5">
+                      <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-muted">{sl.name}</span>
+                      {t.draft[i] ? castawayName(season, t.draft[i]) : <span className="text-muted">—</span>}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-2xl border border-line md:block">
           <table className="w-full min-w-max border-collapse text-sm">
             <thead>
               <tr className="bg-surface-2 text-left text-xs font-semibold uppercase tracking-wider text-muted">

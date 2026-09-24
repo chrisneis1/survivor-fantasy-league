@@ -1,10 +1,12 @@
+import { cache } from "react";
 import type { Season } from "@/domain/types";
 import { store } from "@/server";
 
 // Seasons live in the database (seeded with the bundled reference season on first run).
 export const allSeasons = (): Promise<Season[]> => store().list();
 
-export const getSeason = async (id: string): Promise<Season | undefined> => (await store().get(id))?.season;
+/** One read per request: the season layout and the page both ask for it. */
+export const getSeason = cache(async (id: string): Promise<Season | undefined> => (await store().get(id))?.season);
 
 /** The season on the league landing page: the active or in-setup one, else the most recent archived one. */
 export async function getCurrentSeason(): Promise<Season | undefined> {

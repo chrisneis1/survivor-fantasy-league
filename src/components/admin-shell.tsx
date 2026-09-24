@@ -29,17 +29,17 @@ export async function AdminShell({ season, active, children }: { season?: Season
           <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
             <TorchMark size={34} />
             <span className="min-w-0 leading-none">
-              <span className="eyebrow flex items-center gap-1 text-[9.5px] text-accent"><IconShield size={11} /> Commissioner tools</span>
+              <span className="eyebrow flex items-center gap-1 whitespace-nowrap text-[9.5px] text-accent"><IconShield size={11} /> Commissioner<span className="hidden sm:inline"> tools</span></span>
               <span className="display mt-0.5 block truncate text-lg font-extrabold uppercase tracking-wide">{season ? season.name : "All seasons"}</span>
             </span>
           </Link>
           <span className="flex-1" />
           <span className="hidden text-sm text-muted md:inline">Signed in as {access.label}</span>
-          <Link href={season ? `/${season.id}` : "/"} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
-            Public site <IconArrowRight size={14} />
+          <Link href={season ? `/${season.id}` : "/"} aria-label="Public site" className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-sm font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink sm:px-3">
+            <span className="hidden sm:inline">Public site</span> <IconArrowRight size={16} />
           </Link>
-          <form action={signOutAction}>
-            <button className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-3 text-sm font-semibold text-ink-2 transition-colors hover:border-accent/60 hover:text-ink">Sign out</button>
+          <form action={signOutAction} className="shrink-0">
+            <button className="inline-flex min-h-10 items-center whitespace-nowrap rounded-full border border-line-strong px-3 text-sm font-semibold text-ink-2 transition-colors hover:border-accent/60 hover:text-ink">Sign out</button>
           </form>
         </div>
         {season ? (

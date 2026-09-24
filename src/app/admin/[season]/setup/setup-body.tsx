@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
 import { Card, PageHeader, StatusBadge, SectionHeader } from "@/components/ui";
@@ -36,6 +37,24 @@ import {
 
 const Hidden = ({ season }: { season: Season }) => <input type="hidden" name="seasonId" value={season.id} />;
 
+const phaseShort = { "pre-merge": "Pre", "post-merge": "Post", finale: "Finale" } as const;
+const signedPts = (v: number | null) => (v === null ? "—" : v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : "0");
+const policyLabel = { EFFECTIVE: "current roster", ORIGINAL_DRAFT: "original draft", SNAPSHOT_AS_OF: "snapshot" } as const;
+
+/** A collapsed row that opens to its edit form: keeps long lists (rules, episodes) scannable, especially on a phone. */
+function EditRow({ summary, children, className = "" }: { summary: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <details className={`group rounded-xl border border-line bg-surface-2/40 open:bg-surface-2/70 ${className}`}>
+      <summary className="flex min-h-12 cursor-pointer items-center gap-2 px-3 py-2 text-sm">
+        <span className="min-w-0 flex-1">{summary}</span>
+        <span className="shrink-0 text-xs font-semibold text-accent group-open:hidden">Edit</span>
+        <span aria-hidden className="shrink-0 text-muted transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div className="border-t border-line px-3 pb-3 pt-3">{children}</div>
+    </details>
+  );
+}
+
 function Issues({ issues, section }: { issues: SetupIssue[]; section: SetupIssue["section"] }) {
   const mine = issues.filter((i) => i.section === section);
   if (!mine.length) return null;
@@ -62,6 +81,14 @@ export async function SetupBody({ season }: { season: Season }) {
   const allUsers = await store().listUsers();
   const inSeason = new Set(season.teams.map((t) => t.id));
   const availableUsers = allUsers.filter((u) => !inSeason.has(slug(u.username)));
+  const sections: { id: string; label: string; issues: SetupIssue["section"][] }[] = [
+    { id: "basics", label: "Basics", issues: ["basics"] },
+    { id: "cast", label: "Tribes & cast", issues: ["cast", "rosters"] },
+    { id: "teams", label: "Teams", issues: ["teams"] },
+    { id: "episodes", label: "Episodes", issues: ["episodes"] },
+    { id: "scoring", label: "Scoring", issues: ["scoring"] },
+    ...(access?.kind === "admin" ? [{ id: "danger", label: "Danger zone", issues: [] }] : []),
+  ];
 
   return (
     <>
@@ -71,8 +98,24 @@ export async function SetupBody({ season }: { season: Season }) {
           : "The season is locked. Only episode structure and scoring values can still change, and every change is logged."}
       </PageHeader>
 
+      <nav aria-label="Setup sections" className="sticky top-[6.75rem] z-20 -mx-4 mb-6 border-y border-line bg-bg/90 px-4 py-2 backdrop-blur sm:top-28 sm:mx-0 sm:rounded-full sm:border sm:px-2">
+        <ul className="no-scrollbar flex gap-1.5 overflow-x-auto">
+          {sections.map((sec) => {
+            const errors = issues.filter((i) => i.level === "error" && sec.issues.includes(i.section)).length;
+            return (
+              <li key={sec.id}>
+                <a href={`#${sec.id}`} className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-semibold text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
+                  {sec.label}
+                  {errors ? <span className="num rounded-full bg-bad/20 px-1.5 text-[11px] text-bad" aria-label={`${errors} to fix`}>{errors}</span> : null}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
       <div className="grid gap-10">
-        <section>
+        <section id="basics" className="scroll-mt-44">
           <SectionHeader>1 · Basics</SectionHeader>
           <Card className="p-4">
             <Issues issues={issues} section="basics" />
@@ -107,7 +150,7 @@ export async function SetupBody({ season }: { season: Season }) {
           </Card>
         </section>
 
-        <section>
+        <section id="cast" className="scroll-mt-44">
           <SectionHeader>2 · Tribes, roster slots and cast</SectionHeader>
           <Card className="grid gap-6 p-4">
             <Issues issues={issues} section="cast" />
@@ -208,7 +251,7 @@ export async function SetupBody({ season }: { season: Season }) {
           </Card>
         </section>
 
-        <section>
+        <section id="teams" className="scroll-mt-44">
           <SectionHeader>3 · Teams and opening order</SectionHeader>
           <Card className="grid gap-6 p-4">
             <Issues issues={issues} section="teams" />
@@ -273,9 +316,9 @@ export async function SetupBody({ season }: { season: Season }) {
           </Card>
         </section>
 
-        <section>
+        <section id="episodes" className="scroll-mt-44">
           <SectionHeader>4 · Episodes</SectionHeader>
-          <Card className="grid gap-4 p-4">
+          <Card className="grid gap-2.5 p-4">
             <Issues issues={issues} section="episodes" />
             {season.status !== "ARCHIVED" ? (
               <ActionForm action={applyEpisodeLayoutAction} submit="Lay out episodes" ghost confirm="Lay out the episodes? Episodes that are already scored are left alone.">
@@ -289,13 +332,22 @@ export async function SetupBody({ season }: { season: Season }) {
               </ActionForm>
             ) : null}
             {season.episodes.map((e) => (
-              <div key={e.id} className="border-b border-line pb-4 last:border-b-0 last:pb-0">
+              <div key={e.id}>
                 {e.state === "PUBLISHED" || season.status === "ARCHIVED" ? (
                   <p className="text-sm">
                     <strong>{e.title}</strong> <span className="text-muted">· {e.phase} · {e.rosterPolicy.toLowerCase().replace("_", " ")}</span> <StatusBadge tone="good">Locked</StatusBadge>{" "}
                     {e.excludeFromStandings ? <StatusBadge>Doesn&apos;t count</StatusBadge> : null}
                   </p>
                 ) : (
+                  <EditRow
+                    summary={
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <strong>{e.title}</strong>
+                        <span className="text-muted">{e.phase} · {policyLabel[e.rosterPolicy]}{e.rosterPolicy === "SNAPSHOT_AS_OF" && e.rosterPolicySourceEpisode ? ` ${e.rosterPolicySourceEpisode}` : ""}</span>
+                        {e.excludeFromStandings ? <StatusBadge>Doesn&apos;t count</StatusBadge> : null}
+                      </span>
+                    }
+                  >
                   <ActionForm action={updateEpisodeAction} submit={`Save episode ${e.number}`} ghost>
                     <Hidden season={season} /><input type="hidden" name="number" value={e.number} />
                     <div className="grid gap-3 sm:grid-cols-4">
@@ -309,6 +361,7 @@ export async function SetupBody({ season }: { season: Season }) {
                       Doesn&apos;t count toward standings — score it, but no team's total ever includes it (e.g. a premiere scored before the draft)
                     </label>
                   </ActionForm>
+                  </EditRow>
                 )}
               </div>
             ))}
@@ -333,7 +386,7 @@ export async function SetupBody({ season }: { season: Season }) {
           </Card>
         </section>
 
-        <section>
+        <section id="scoring" className="scroll-mt-44">
           <SectionHeader>5 · Scoring rules</SectionHeader>
           <p className="-mt-1 mb-3 text-sm text-muted">The scoring template. Each rule has a value for each phase (blank where it doesn't apply). Changes apply to episodes scored from now on; published scores keep the points they resolved to.</p>
           <Issues issues={issues} section="scoring" />
@@ -370,22 +423,37 @@ export async function SetupBody({ season }: { season: Season }) {
             </Card>
           ) : null}
 
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             {season.rules.map((r) => {
               const used = ruleUsed(season, r.key);
-              return (
-                <Card key={r.key} className={`p-4 ${r.retired ? "opacity-70" : ""}`}>
-                  <p className="flex flex-wrap items-center gap-2 font-semibold">
+              const ruleSummary = (
+                <span className="grid gap-1">
+                  <span className="flex flex-wrap items-center gap-2 font-semibold">
                     {r.name}
                     <StatusBadge>{r.inputType}</StatusBadge>
                     {r.retired ? <StatusBadge tone="bad">Retired</StatusBadge> : null}
                     {used ? <StatusBadge tone="good">In use</StatusBadge> : null}
-                    <span className="text-xs font-normal text-muted">scores in: {rulePhases(r).join(", ") || "no phase"}</span>
-                  </p>
+                  </span>
+                  <span className="num text-xs text-muted">
+                    {r.category} ·{" "}
+                    {r.inputType === "choice"
+                      ? `${(r.options ?? []).length} options`
+                      : r.inputType === "manual"
+                        ? "manual ± with note"
+                        : phases.map((p) => `${phaseShort[p]} ${signedPts(r.points[p])}`).join(" · ")}
+                    {rulePhases(r).length === 0 ? " · scores in no phase" : ""}
+                  </span>
+                </span>
+              );
+              return (
+                <div key={r.key} className={r.retired ? "opacity-70" : ""}>
                   {season.status === "ARCHIVED" ? (
-                    <p className="mt-1 text-sm text-muted">{r.note}</p>
+                    <Card className="p-3.5">
+                      {ruleSummary}
+                      <p className="mt-1 text-sm text-muted">{r.note}</p>
+                    </Card>
                   ) : (
-                    <>
+                    <EditRow summary={ruleSummary}>
                       <ActionForm action={updateRuleAction} submit="Save rule" ghost>
                         <Hidden season={season} /><input type="hidden" name="rule" value={r.key} />
                         <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -426,9 +494,9 @@ export async function SetupBody({ season }: { season: Season }) {
                           </ActionForm>
                         ) : null}
                       </div>
-                    </>
+                    </EditRow>
                   )}
-                </Card>
+                </div>
               );
             })}
           </div>
@@ -464,7 +532,7 @@ export async function SetupBody({ season }: { season: Season }) {
         </section>
 
         {access?.kind === "admin" ? (
-          <section>
+          <section id="danger" className="scroll-mt-44">
             <SectionHeader>Danger zone</SectionHeader>
             <Card className="border-bad/40 p-4">
               <h3 className="mb-1 font-semibold text-bad">Delete this season</h3>
