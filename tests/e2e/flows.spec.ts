@@ -1,5 +1,6 @@
 // The things people do on the site, end to end on a phone. These change the test database, so they run in order.
 import { expect, test } from "@playwright/test";
+import { SCORING_TOKEN } from "./fixtures";
 import { expectNoHorizontalOverflow, signInAsAdmin, signInAsPlayer, watchErrors } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -238,4 +239,41 @@ test("the commissioner scores the premiere before the draft", async ({ page }) =
   await page.goto("/survivor-51/castaways/aaliyah");
   await expect(page.getByText(/Voted out/).first()).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("the weekly auto-scorer saves progress for the commissioner to review, and can't publish", async ({ page, request }) => {
+  const url = "/api/auto-scoring/demo-active/9";
+  const auth = { Authorization: `Bearer ${SCORING_TOKEN}` };
+  expect((await request.get(url)).status(), "no token").toBe(401);
+  expect((await request.get(url, { headers: { Authorization: "Bearer wrong" } })).status(), "wrong token").toBe(401);
+
+  const brief = await (await request.get(url, { headers: auth })).json();
+  expect(brief.episode).toMatchObject({ number: 9, state: "SCHEDULED", savedProgress: null });
+  const castaway = brief.castaways[0].name as string;
+  const immunity = (brief.rules as { key: string }[]).find((r) => r.key === "individualImmunity");
+  expect(immunity).toBeTruthy();
+
+  const bad = await request.put(url, { headers: auth, data: { rows: [{ castaway: "Nobody Here", inputs: {} }] } });
+  expect(bad.status()).toBe(422);
+  expect((await bad.json()).problems).toContain('Unknown castaway "Nobody Here".');
+
+  const ok = await request.put(url, {
+    headers: auth,
+    data: { rows: [{ castaway, inputs: { individualImmunity: { on: true, note: "Won the final round" } } }], note: "Sources: test recap.\nCheck: who said the episode title." },
+  });
+  expect(ok.status()).toBe(200);
+  // The published episode is off limits.
+  expect((await request.put("/api/auto-scoring/demo-active/1", { headers: auth, data: { rows: [] } })).status()).toBe(409);
+
+  await signInAsAdmin(page);
+  await page.goto("/admin/demo-active");
+  await expect(page.getByText("Auto-scored · review")).toBeVisible();
+  await page.goto("/admin/demo-active/score/9");
+  await expect(page.getByRole("heading", { name: "Scored automatically — check before publishing" })).toBeVisible();
+  await expect(page.getByText("Check: who said the episode title.")).toBeVisible();
+
+  // Once the commissioner saves it themselves, the auto-scorer can't overwrite it.
+  await page.getByRole("button", { name: "Save progress" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Progress saved" })).toBeVisible();
+  expect((await request.put(url, { headers: auth, data: { rows: [] } })).status()).toBe(409);
 });

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { ADMIN_PASSCODE, DB_FILE, PORT, SESSION_SECRET } from "./tests/e2e/fixtures";
+import { ADMIN_PASSCODE, DB_FILE, PORT, SCORING_TOKEN, SESSION_SECRET } from "./tests/e2e/fixtures";
 
 // Page smoke tests against the production build (run `npm run build` first). The web server seeds a throwaway
 // SQLite file on every run, so tests start from the same state and never see real league data.
@@ -25,6 +25,7 @@ export default defineConfig({
       TURSO_AUTH_TOKEN: "",
       COMMISSIONER_PASSCODE: ADMIN_PASSCODE,
       SESSION_SECRET,
+      LEAGUE_SCORING_TOKEN: SCORING_TOKEN,
     },
   },
 });

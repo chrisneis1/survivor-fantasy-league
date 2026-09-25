@@ -95,6 +95,31 @@ export function resolveRow(season: Pick<Season, "rules">, phase: Phase, row: Dra
   return { castaway: row.castaway, entries, total: entries.reduce((s, e) => s + e.points, 0), errors };
 }
 
+/** Keeps only well-formed rows and inputs: known castaways, rules and tribes, sane numbers, notes up to 300 characters. */
+export function cleanRows(s: Season, rows: DraftRow[]): DraftRow[] {
+  const known = new Set(s.castaways.map((c) => c.id));
+  const rules = new Set(s.rules.map((r) => r.key));
+  const out: DraftRow[] = [];
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || !known.has(r.castaway)) continue;
+    const inputs: Record<string, RuleInput> = {};
+    for (const [k, v] of Object.entries(r.inputs ?? {})) {
+      if (!rules.has(k) || !v) continue;
+      const i: RuleInput = {};
+      if (v.on === true) i.on = true;
+      if (typeof v.quantity === "number" && v.quantity > 0) i.quantity = Math.floor(v.quantity);
+      if (typeof v.option === "number" && v.option >= 0) i.option = Math.floor(v.option);
+      if (typeof v.points === "number" && v.points !== 0) i.points = v.points;
+      if (typeof v.note === "string" && v.note.trim()) i.note = v.note.trim().slice(0, 300);
+      if (Object.keys(i).length) inputs[k] = i;
+    }
+    const exit = r.exit && statusTypes.includes(r.exit.type as StatusType) ? { type: r.exit.type, ...(r.exit.note?.trim() ? { note: r.exit.note.trim().slice(0, 300) } : {}) } : undefined;
+    const tribe = typeof r.tribe === "string" && s.tribes.some((t) => t.id === r.tribe) ? r.tribe : undefined;
+    if (Object.keys(inputs).length || exit || tribe) out.push({ castaway: r.castaway, inputs, ...(exit ? { exit } : {}), ...(tribe ? { tribe } : {}) });
+  }
+  return out;
+}
+
 // ---------- progress + publish ----------
 
 export function saveDraft(season: Season, draft: Omit<EpisodeDraft, "savedAt">, at: string): Season {

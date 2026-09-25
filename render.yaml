@@ -16,3 +16,6 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
+      # Optional: turns on the weekly auto-scorer's access (it can only save scoring as progress, never publish).
+      - key: LEAGUE_SCORING_TOKEN
+        sync: false
