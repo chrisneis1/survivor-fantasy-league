@@ -197,6 +197,8 @@ export interface Season {
   drafts: EpisodeDraft[];
   /** Post-publication score corrections, oldest first. */
   corrections: Correction[];
+  /** One-time data changes already applied to this season (see migrate.ts), so none runs twice. */
+  migrations?: string[];
   /** Set on seasons imported into the archive from an old spreadsheet. */
   archive?: SeasonArchive;
   /** The source workbook's own numbers, kept only as a regression fixture. */

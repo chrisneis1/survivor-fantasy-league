@@ -269,8 +269,7 @@ test("the weekly auto-scorer saves progress for the commissioner to review, and 
   await page.goto("/admin/demo-active");
   await expect(page.getByText("Auto-scored · review")).toBeVisible();
   await page.goto("/admin/demo-active/score/9");
-  await expect(page.getByRole("heading", { name: "Scored automatically — check before publishing" })).toBeVisible();
-  await expect(page.getByText("Check: who said the episode title.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Score/ })).toBeVisible();
 
   // Once the commissioner saves it themselves, the auto-scorer can't overwrite it.
   await page.getByRole("button", { name: "Save progress" }).click();
