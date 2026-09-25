@@ -7,6 +7,7 @@ import { Card, PageHeader, StatusBadge, PolicyPill, SectionHeader } from "@/comp
 import { getSeason } from "@/data";
 import { latestPublished } from "@/domain/engine";
 import { currentTurn, draftResetBlock, openWindow, openingTurn, openingTurnStuck, windowBlock } from "@/domain/picks";
+import { AUTO_SCORER } from "@/domain/auto-scoring";
 import { validateSetup } from "@/domain/setup";
 import { episodeLabel } from "@/lib/format";
 import { teamOf } from "@/lib/view";
@@ -182,6 +183,7 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
                 <StatusBadge>{e.phase}</StatusBadge>
                 <PolicyPill episode={e} />
                 <StatusBadge tone={stateTone[e.state]}>{stateLabel[e.state]}</StatusBadge>
+                {e.state === "SCORING" && season.drafts.find((d) => d.episode === e.number)?.savedBy === AUTO_SCORER ? <StatusBadge tone="accent">Auto-scored · review</StatusBadge> : null}
               </div>
               {e.state === "PUBLISHED" ? (
                 <span className="flex gap-4 text-sm font-semibold">

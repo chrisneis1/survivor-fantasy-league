@@ -282,6 +282,10 @@ export interface EpisodeDraft {
   episode: number;
   rows: DraftRow[];
   savedAt: string;
+  /** Who saved it: a commissioner's actor id, or the weekly auto-scorer. Absent on drafts saved before this was kept. */
+  savedBy?: string;
+  /** Notes for the commissioner's review (the auto-scorer's sources and anything to double-check). */
+  note?: string;
 }
 
 export interface Correction {

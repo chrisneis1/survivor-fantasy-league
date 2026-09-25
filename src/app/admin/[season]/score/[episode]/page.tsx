@@ -5,6 +5,7 @@ import { ScoringGrid } from "@/components/scoring-grid";
 import { PageHeader, StatusBadge, PolicyPill } from "@/components/ui";
 import { getSeason } from "@/data";
 import { currentTribeId, isActiveAt, ownersOf, rosterForEpisode } from "@/domain/engine";
+import { AUTO_SCORER } from "@/domain/auto-scoring";
 import { rowsFromPublished, rulesForPhase, validatePublish } from "@/domain/scoring";
 
 export const metadata = { title: "Score episode" };
@@ -52,6 +53,14 @@ export default async function ScoreEpisode({ params }: { params: Promise<{ seaso
           </span>
         </span>
       </PageHeader>
+
+      {!published && draft?.savedBy === AUTO_SCORER ? (
+        <section aria-labelledby="auto-notes" className="mb-5 rounded-xl border border-accent/40 bg-accent/5 p-3 sm:p-4">
+          <h2 id="auto-notes" className="font-semibold">Scored automatically — check before publishing</h2>
+          <p className="mt-0.5 text-sm text-muted">The weekly auto-scorer researched this episode and saved it as progress on {draft ? new Date(draft.savedAt).toLocaleString("en-US", { timeZone: season.config.timezone, dateStyle: "medium", timeStyle: "short" }) : ""}. Nothing is public until you publish.</p>
+          {draft.note ? <p className="mt-2 whitespace-pre-line text-sm text-ink-2">{draft.note}</p> : null}
+        </section>
+      ) : null}
 
       <ScoringGrid
         seasonId={season.id}

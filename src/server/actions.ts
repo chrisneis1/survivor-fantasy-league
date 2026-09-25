@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { bundledSeasons } from "@/data/archive";
 import { castPresets } from "@/data/casts";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, resetOpeningSelection } from "@/domain/picks";
-import { correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
+import { cleanRows, correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
 import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
 import { addRule, applyCast, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
@@ -464,37 +464,14 @@ export async function removeLastEpisodeAction(_: ActionState, fd: FormData) {
 const isStatus = (v: unknown): v is StatusType => statusTypes.includes(v as StatusType);
 
 /** The grid is sent from the browser, so coerce and drop anything that is not a well-formed input. */
-function cleanRows(s: Season, rows: DraftRow[]): DraftRow[] {
-  const known = new Set(s.castaways.map((c) => c.id));
-  const rules = new Set(s.rules.map((r) => r.key));
-  const out: DraftRow[] = [];
-  for (const r of Array.isArray(rows) ? rows : []) {
-    if (!r || !known.has(r.castaway)) continue;
-    const inputs: Record<string, RuleInput> = {};
-    for (const [k, v] of Object.entries(r.inputs ?? {})) {
-      if (!rules.has(k) || !v) continue;
-      const i: RuleInput = {};
-      if (v.on === true) i.on = true;
-      if (typeof v.quantity === "number" && v.quantity > 0) i.quantity = Math.floor(v.quantity);
-      if (typeof v.option === "number" && v.option >= 0) i.option = Math.floor(v.option);
-      if (typeof v.points === "number" && v.points !== 0) i.points = v.points;
-      if (typeof v.note === "string" && v.note.trim()) i.note = v.note.trim().slice(0, 300);
-      if (Object.keys(i).length) inputs[k] = i;
-    }
-    const exit = r.exit && isStatus(r.exit.type) ? { type: r.exit.type, ...(r.exit.note?.trim() ? { note: r.exit.note.trim().slice(0, 300) } : {}) } : undefined;
-    const tribe = typeof r.tribe === "string" && s.tribes.some((t) => t.id === r.tribe) ? r.tribe : undefined;
-    if (Object.keys(inputs).length || exit || tribe) out.push({ castaway: r.castaway, inputs, ...(exit ? { exit } : {}), ...(tribe ? { tribe } : {}) });
-  }
-  return out;
-}
 
 export async function saveScoringAction(seasonId: string, episode: number, rows: DraftRow[]): Promise<ActionState> {
-  return mutate(seasonId, (s, at) => ({ season: saveDraft(s, { episode, rows: cleanRows(s, rows) }, at), message: "Progress saved. Standings are unchanged until you publish." }));
+  return mutate(seasonId, (s, at, ctx) => ({ season: saveDraft(s, { episode, rows: cleanRows(s, rows), savedBy: ctx.actor }, at), message: "Progress saved. Standings are unchanged until you publish." }));
 }
 
 export async function publishEpisodeAction(seasonId: string, episode: number, rows: DraftRow[]): Promise<ActionState> {
   return mutate(seasonId, (s, at, ctx) => {
-    const saved = saveDraft(s, { episode, rows: cleanRows(s, rows) }, at);
+    const saved = saveDraft(s, { episode, rows: cleanRows(s, rows), savedBy: ctx.actor }, at);
     const r = publishEpisode(saved, episode, ctx.actor);
     return { ...r, message: `Episode ${episode} published. Standings are updated.` };
   });
