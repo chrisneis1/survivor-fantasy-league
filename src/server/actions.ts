@@ -427,6 +427,28 @@ export async function updateEpisodeAction(_: ActionState, fd: FormData) {
   });
 }
 
+/**
+ * Scoring an episode that airs before the draft (usually the premiere): it's marked as not counting toward standings
+ * (no team has a roster to score it with, and it stays that way after the draft), then opens its scoring page. The
+ * castaways' points and exits still count, so anyone voted out can't be drafted.
+ */
+export async function scoreBeforeDraftAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  const seasonId = str(fd, "seasonId");
+  const number = Number(str(fd, "episode"));
+  const r = await mutate(seasonId, (s, _at, ctx) => {
+    if (s.status !== "SETUP") throw new Error("Only a season still in setup can score an episode before the draft.");
+    const ep = s.episodes.find((e) => e.number === number);
+    if (!ep) throw new Error("Unknown episode.");
+    if (ep.state === "PUBLISHED") throw new Error("That episode is already published.");
+    const earlier = s.episodes.find((e) => e.number < number && e.state !== "PUBLISHED");
+    if (earlier) throw new Error(`Publish episode ${earlier.number} first.`);
+    ep.excludeFromStandings = true;
+    return { season: s, audit: [change(s, ctx.actor, "episode", String(number), "SCORE_BEFORE_DRAFT", undefined, { excludeFromStandings: true })], message: `Episode ${number} won't count toward standings.` };
+  });
+  if (r.error) return r;
+  redirect(`/admin/${seasonId}/score/${number}`);
+}
+
 export async function removeLastEpisodeAction(_: ActionState, fd: FormData) {
   return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
     const last = s.episodes.at(-1);

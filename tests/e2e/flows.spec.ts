@@ -209,3 +209,33 @@ test("the commissioner loads the researched Survivor 51 cast", async ({ page }) 
   await expect(page.getByText("Thien An")).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("the commissioner scores the premiere before the draft", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signInAsAdmin(page);
+  await page.goto("/admin/survivor-51");
+  // Only the next episode can be scored before the draft; later ones wait their turn.
+  await expect(page.getByRole("button", { name: "Score before the draft" })).toHaveCount(1);
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Score before the draft" }).click();
+  await expect(page).toHaveURL(/\/admin\/survivor-51\/score\/1$/);
+  await expect(page.getByText("Doesn't count toward standings")).toBeVisible();
+
+  await page.getByRole("button", { name: "By rule" }).click();
+  await page.getByLabel("Rule", { exact: true }).selectOption("exit");
+  await page.getByRole("checkbox", { name: "Aaliyah: Voted out" }).check();
+  await page.getByRole("button", { name: "Save progress" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Progress saved" })).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: /^Publish / }).click();
+  // Back on the overview: Episode 1 is published, the season is still waiting for its draft, and Episode 2 is next.
+  await expect(page).toHaveURL(/\/admin\/survivor-51$/);
+  await expect(page.getByRole("link", { name: "Edit scoring" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Launch to the draft phase" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Score before the draft" })).toHaveCount(1);
+
+  // Aaliyah is out of the game, so she can't be drafted.
+  await page.goto("/survivor-51/castaways/aaliyah");
+  await expect(page.getByText(/Voted out/).first()).toBeVisible();
+  expect(errors).toEqual([]);
+});

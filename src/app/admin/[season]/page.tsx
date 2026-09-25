@@ -11,7 +11,7 @@ import { validateSetup } from "@/domain/setup";
 import { episodeLabel } from "@/lib/format";
 import { teamOf } from "@/lib/view";
 import { store } from "@/server";
-import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction, resetDraftAction } from "@/server/actions";
+import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction, resetDraftAction, scoreBeforeDraftAction } from "@/server/actions";
 
 export const metadata = { title: "Commissioner" };
 
@@ -170,7 +170,11 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
       <SectionHeader>Episodes</SectionHeader>
       <ol className="grid gap-2">
         {season.episodes.map((e) => {
-          const blocked = season.status !== "ACTIVE" || (e.state !== "PUBLISHED" && season.episodes.some((x) => x.number < e.number && x.state !== "PUBLISHED"));
+          const waiting = e.state !== "PUBLISHED" && season.episodes.some((x) => x.number < e.number && x.state !== "PUBLISHED");
+          // Before the draft, the next episode can still be scored (the premiere, usually): it never counts toward
+          // standings, but whoever it eliminates can't be drafted.
+          const beforeDraft = season.status === "SETUP" && !waiting && e.state !== "PUBLISHED";
+          const blocked = waiting || (season.status !== "ACTIVE" && !(beforeDraft && e.excludeFromStandings));
           return (
             <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -184,8 +188,18 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
                   <Link href={`/${season.id}/episodes/${e.number}`} className="text-muted hover:text-ink">View</Link>
                   <Link href={`/admin/${season.id}/score/${e.number}`} className="text-accent hover:underline">Edit scoring</Link>
                 </span>
+              ) : beforeDraft && !e.excludeFromStandings ? (
+                <ActionForm
+                  action={scoreBeforeDraftAction}
+                  submit="Score before the draft"
+                  className="flex flex-wrap items-center gap-2"
+                  confirm={`Score ${e.phase === "finale" ? "the finale" : `Episode ${e.number}`} before the draft? It won't count toward any team's standings (no one has a roster yet), but castaways it eliminates can't be drafted.`}
+                >
+                  <input type="hidden" name="seasonId" value={season.id} />
+                  <input type="hidden" name="episode" value={e.number} />
+                </ActionForm>
               ) : blocked ? (
-                <span className="text-sm text-muted">{season.status === "ACTIVE" ? "Publish the earlier episode first" : "Activate the season to score"}</span>
+                <span className="text-sm text-muted">{waiting ? "Publish the earlier episode first" : season.status === "OPENING_SELECTION" ? "Finish the draft to score" : "Activate the season to score"}</span>
               ) : (
                 <Link href={`/admin/${season.id}/score/${e.number}`} className="rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink">
                   {e.state === "SCORING" ? "Continue scoring" : "Score episode"}
