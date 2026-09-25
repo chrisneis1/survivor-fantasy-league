@@ -3,7 +3,7 @@ import { ActionForm, Field } from "@/components/action-form";
 import { inputCls } from "@/components/styles";
 import { Card, PageHeader, StatusBadge, SectionHeader } from "@/components/ui";
 import { castPresets, type CastPreset } from "@/data/casts";
-import { applyCast, optionsToText, ruleUsed, rulePhases, layoutOf } from "@/domain/template";
+import { applyCast, optionsToText, ruleUsed, rulePublished, rulePhases, layoutOf } from "@/domain/template";
 import { slug, validateSetup, type SetupIssue } from "@/domain/setup";
 import type { Season } from "@/domain/types";
 import { store } from "@/server";
@@ -515,8 +515,15 @@ export async function SetupBody({ season }: { season: Season }) {
                         <div className="mt-3 grid gap-3 sm:grid-cols-3">
                           <Field label="Name"><input name="name" defaultValue={r.name} required className={inputCls} /></Field>
                           <Field label="Group"><input name="category" list="rule-groups" defaultValue={r.category} className={inputCls} /></Field>
-                          {used ? (
+                          {used && (rulePublished(season, r.key) || (r.inputType !== "boolean" && r.inputType !== "quantity")) ? (
                             <Field label="Entered as" hint="Locked: this rule has been scored."><input value={r.inputType} readOnly className={inputCls} /></Field>
+                          ) : used ? (
+                            <Field label="Entered as" hint="Saved progress that uses it converts too.">
+                              <select name="inputType" defaultValue={r.inputType} className={inputCls}>
+                                <option value="boolean">On / off</option>
+                                <option value="quantity">Count (× value)</option>
+                              </select>
+                            </Field>
                           ) : (
                             <Field label="Entered as" hint="On/off, a count, one of several options, or a signed manual number.">
                               <select name="inputType" defaultValue={r.inputType} className={inputCls}>

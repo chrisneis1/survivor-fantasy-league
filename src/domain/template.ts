@@ -32,6 +32,35 @@ export interface RuleForm {
 }
 
 /** Has this rule been scored (published or saved as progress)? A used rule keeps its meaning: it can be retired, not deleted. */
+/** Has a published episode scored this rule? Unlike saved progress, that can't be converted, so it locks the rule's type. */
+export function rulePublished(season: Season, key: string): boolean {
+  return season.scores.some((s) => s.entries.some((e) => e.rule === key));
+}
+
+/**
+ * Switches a rule between a checkbox and a count, converting any saved progress that uses it: a count of one or more
+ * becomes a tick; a tick becomes a count of one. Mutates `season` (callers pass a copy).
+ */
+export function switchCountAndCheckbox(season: Season, key: string, to: "boolean" | "quantity"): void {
+  const rule = season.rules.find((r) => r.key === key);
+  if (!rule || rule.inputType === to) return;
+  if (rule.inputType !== "boolean" && rule.inputType !== "quantity") throw new Error("Only a checkbox or a count can be switched.");
+  if (rulePublished(season, key)) throw new Error("This rule has already been scored in a published episode, so how it is entered can't change. Retire it and add a new one.");
+  rule.inputType = to;
+  for (const d of season.drafts)
+    for (const row of d.rows) {
+      const input = row.inputs[key];
+      if (!input) continue;
+      const count = to === "boolean" ? input.quantity ?? 0 : input.on ? 1 : 0;
+      if (!count) {
+        delete row.inputs[key];
+        continue;
+      }
+      const note = to === "boolean" && count > 1 ? `${input.note ? `${input.note} ` : ""}(was ×${count}; add the extra under Manual adjustment)` : input.note;
+      row.inputs[key] = to === "boolean" ? { on: true, ...(note ? { note } : {}) } : { quantity: count, ...(note ? { note } : {}) };
+    }
+}
+
 export function ruleUsed(season: Season, key: string): boolean {
   return season.scores.some((s) => s.entries.some((e) => e.rule === key)) || season.drafts.some((d) => d.rows.some((r) => key in r.inputs));
 }
@@ -121,8 +150,13 @@ export function updateRule(season: Season, key: string, form: RuleForm, actor: s
   const next = clone(season);
   const rule = next.rules.find((r) => r.key === key);
   if (!rule) throw new Error("Unknown rule.");
-  if (rule.inputType !== f.inputType && ruleUsed(season, key)) throw new Error("This rule has already been scored, so how it is entered can't change. Retire it and add a new one.");
   const before = clone(rule);
+  const countOrCheckbox = (t: string) => t === "boolean" || t === "quantity";
+  if (rule.inputType !== f.inputType) {
+    // A checkbox and a count convert into each other, even in saved progress; anything else only before any scoring.
+    if (countOrCheckbox(rule.inputType) && countOrCheckbox(f.inputType)) switchCountAndCheckbox(next, key, f.inputType as "boolean" | "quantity");
+    else if (ruleUsed(season, key)) throw new Error("This rule has already been scored, so how it is entered can't change. Retire it and add a new one.");
+  }
   Object.assign(rule, { name: f.name, category: f.category, note: f.note, inputType: f.inputType, points: f.points });
   if (f.inputType === "choice") rule.options = f.options;
   else delete rule.options;
