@@ -38,7 +38,7 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
     return { e, roster, score, other, otherLabel: cost && other === -cost ? "Swap cost" : "Recorded adjustment" };
   });
   const current = effectiveRoster(season, team.id, last);
-  const slotPoints = (slot: number) => perEpisode.reduce((sum, pe) => sum + (pe.roster[slot]?.pts ?? 0), 0);
+  const slotPoints = (slot: number) => perEpisode.reduce((sum, pe) => sum + (pe.e.excludeFromStandings ? 0 : (pe.roster[slot]?.pts ?? 0)), 0);
   const rosterPoints = (slot: number, castaway: string) => (finalOnly ? castawaySeasonTotal(season, castaway, published) : slotPoints(slot));
   const draftEpisodes = season.episodes.filter((e) => e.rosterPolicy === "ORIGINAL_DRAFT");
   const tribeEp = Math.max(published, 1);

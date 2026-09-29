@@ -56,9 +56,10 @@ export function castawayEpisodeTotal(season: Season, castawayId: string, episode
   return cache.get(`${castawayId}:${episode}`) ?? 0;
 }
 
+/** A castaway's season points: every episode through `through`, except those that don't count toward standings. */
 export function castawaySeasonTotal(season: Season, castawayId: string, through = Infinity): number {
   return season.episodes
-    .filter((e) => e.number <= through)
+    .filter((e) => e.number <= through && !e.excludeFromStandings)
     .reduce((sum, e) => sum + castawayEpisodeTotal(season, castawayId, e.number), 0);
 }
 

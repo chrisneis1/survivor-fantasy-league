@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import survivor50 from "../src/data/seasons/survivor-50.json";
 import type { Season } from "../src/domain/types";
-import { standings, teamEpisodeScore } from "../src/domain/engine";
+import { castawayEpisodeTotal, castawaySeasonTotal, standings, teamEpisodeScore } from "../src/domain/engine";
 import { makeOpeningPick, openOpeningSelection, openingBlock, openingTurn } from "../src/domain/picks";
 import { publishEpisode, saveDraft, validatePublish } from "../src/domain/scoring";
 import { createSeason } from "../src/domain/setup";
@@ -87,4 +87,16 @@ test("the excluded episode stays worth zero permanently, even once the draft fil
   s2 = publishEpisode(s2, 2, "t").season;
   assert.equal(teamEpisodeScore(s2, ownerOfA1, 2), 4);
   assert.equal(standings(s2, 2).find((r) => r.teamId === ownerOfA1)!.total, 4, "still zero from episode 1, 4 from episode 2");
+});
+
+test("a castaway's season points leave out the episode that doesn't count", () => {
+  let s = season();
+  s = saveDraft(s, { episode: 1, rows: [{ castaway: "a1", inputs: { extra: { points: 5, note: "test" } } }] }, at);
+  s = publishEpisode(s, 1, "t").season;
+  s.status = "ACTIVE";
+  s = saveDraft(s, { episode: 2, rows: [{ castaway: "a1", inputs: { extra: { points: 4, note: "test" } } }] }, at);
+  s.teams = s.teams.map((t, i) => ({ ...t, draft: i === 0 ? ["a1", "a2"] : ["b1", "b2"] }));
+  s = publishEpisode(s, 2, "t").season;
+  assert.equal(castawayEpisodeTotal(s, "a1", 1), 5, "the episode itself still shows what happened");
+  assert.equal(castawaySeasonTotal(s, "a1"), 4, "only Episode 2 counts toward the season total");
 });
