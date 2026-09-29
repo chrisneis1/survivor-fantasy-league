@@ -12,7 +12,8 @@ import { validateSetup } from "@/domain/setup";
 import { episodeLabel } from "@/lib/format";
 import { teamOf } from "@/lib/view";
 import { store } from "@/server";
-import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction, resetDraftAction, scoreBeforeDraftAction } from "@/server/actions";
+import { finalizeSeasonAction, lockWagersAction, openOpeningSelectionAction, openWagersAction, openWindowAction, overrideRosterAction, resetDraftAction, scoreBeforeDraftAction } from "@/server/actions";
+import { inputCls } from "@/components/styles";
 
 export const metadata = { title: "Commissioner" };
 
@@ -110,6 +111,38 @@ export default async function AdminSeason({ params }: { params: Promise<{ season
           </p>
           <ActionForm action={resetDraftAction} submit="Undo the draft and go back to setup" ghost confirm={`Undo the draft? All ${season.opening.picks.length} picks are cleared and every roster goes back to empty. This can't be undone.`}>
             <input type="hidden" name="seasonId" value={season.id} />
+          </ActionForm>
+        </Card>
+      ) : null}
+
+      {season.status === "ACTIVE" ? (
+        <Card className="mb-8 p-4">
+          <SectionHeader>Commissioner override</SectionHeader>
+          <p className="mb-3 text-sm text-muted">
+            Fix a roster when something goes wrong: a bug, a mistake, a league ruling. Every override needs a reason, which goes on the record in the audit log.
+          </p>
+          <ActionForm action={overrideRosterAction} submit="Apply override" ghost confirm="Apply this roster override? Standings recalculate right away.">
+            <input type="hidden" name="seasonId" value={season.id} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block text-sm"><span className="mb-1 block font-semibold">Team</span>
+                <select name="teamId" required className={inputCls}>{season.teams.map((t) => <option key={t.id} value={t.id}>{t.member} · {t.name}</option>)}</select>
+              </label>
+              <label className="block text-sm"><span className="mb-1 block font-semibold">Slot</span>
+                <select name="slot" required className={inputCls}>{season.slots.map((sl, i) => <option key={sl.id} value={i}>{sl.name}</option>)}</select>
+              </label>
+              <label className="block text-sm"><span className="mb-1 block font-semibold">Put in</span>
+                <select name="castawayId" required className={inputCls}>{season.castaways.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              </label>
+            </div>
+            <fieldset className="grid gap-1.5 text-sm">
+              <legend className="mb-1 font-semibold">When it counts</legend>
+              <label className="flex items-start gap-2"><input type="radio" name="mode" value="draft" defaultChecked className="mt-1 accent-[var(--accent)]" /> <span>Replace the drafted pick: counts from the start, so any published episodes rescore</span></label>
+              <label className="flex items-start gap-2"><input type="radio" name="mode" value="swap" className="mt-1 accent-[var(--accent)]" /> <span>Swap from the next episode: earlier episodes keep the roster they had (a free swap)</span></label>
+            </fieldset>
+            <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="skipChecks" className="mt-1 size-4 accent-[var(--accent)]" /> <span><strong>Override the usual checks</strong>: allow it even if the castaway is from the wrong tribe for the slot, over the ownership cap, or already out of the game</span></label>
+            <label className="block text-sm"><span className="mb-1 block font-semibold">Reason</span>
+              <input name="reason" required placeholder="e.g. Kenzie meant to draft Thien An" className={inputCls} />
+            </label>
           </ActionForm>
         </Card>
       ) : null}

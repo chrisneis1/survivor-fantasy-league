@@ -34,7 +34,7 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
     const score = teamEpisodeScore(season, team.id, e.number);
     const cost = txs.reduce((sum, t) => sum + (t.effectiveEpisode === e.number ? (t.cost ?? 0) : 0), 0);
     // Whatever the castaways' points don't account for: a swap's cost, or an adjustment an old sheet recorded.
-    const other = finalOnly ? 0 : score - roster.reduce((sum, r) => sum + r.pts, 0);
+    const other = finalOnly || e.excludeFromStandings ? 0 : score - roster.reduce((sum, r) => sum + r.pts, 0);
     return { e, roster, score, other, otherLabel: cost && other === -cost ? "Swap cost" : "Recorded adjustment" };
   });
   const current = effectiveRoster(season, team.id, last);
@@ -125,6 +125,7 @@ export default async function TeamPage({ params }: { params: Promise<{ season: s
                       </summary>
                       <div className="border-t border-line px-3 pb-3 pt-2 sm:px-4">
                         {finalOnly ? <p className="py-1 text-sm text-muted">The sheet kept this team&apos;s score for each episode but not who was on the roster that week.</p> : null}
+                        {e.excludeFromStandings ? <p className="py-1 text-sm text-muted">This episode doesn&apos;t count toward standings, so the castaways&apos; points below don&apos;t add to the team.</p> : null}
                         <ul className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                           {roster.map((r, i) => (
                             <li key={i} className="flex items-center justify-between gap-2 py-0.5">
