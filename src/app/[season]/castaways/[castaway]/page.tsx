@@ -67,14 +67,17 @@ export default async function CastawayPage({ params }: { params: Promise<{ seaso
         ) : (
           <>
             <Card className="mb-3 p-4 sm:p-5">
-              <EpisodeBars items={rows.map((r) => ({ label: r.e.phase === "finale" ? "F" : String(r.e.number), value: r.pts }))} />
+              <EpisodeBars items={rows.map((r) => ({ label: r.e.phase === "finale" ? "F" : String(r.e.number), value: r.e.excludeFromStandings ? 0 : r.pts }))} />
             </Card>
             <ol className="grid gap-2">
               {rows.map(({ e, pts, entries, owners }) => (
                 <li key={e.id} className="rounded-xl border border-line bg-surface px-3 py-2.5 sm:px-4">
                   <div className="flex items-center justify-between gap-3">
-                    <Link href={seasonPath(season.id, `/episodes/${e.number}`)} className="display text-lg font-bold uppercase hover:text-accent">{episodeLabel(season, e.number)}</Link>
-                    <ScoreChange n={pts} className="display text-xl font-extrabold" />
+                    <span className="flex items-center gap-2">
+                      <Link href={seasonPath(season.id, `/episodes/${e.number}`)} className="display text-lg font-bold uppercase hover:text-accent">{episodeLabel(season, e.number)}</Link>
+                      {e.excludeFromStandings ? <StatusBadge>Doesn&apos;t count</StatusBadge> : null}
+                    </span>
+                    <ScoreChange n={pts} className={`display text-xl font-extrabold ${e.excludeFromStandings ? "line-through opacity-60" : ""}`} />
                   </div>
                   {entries.length ? (
                     <ul className="mt-1.5 flex flex-wrap gap-1.5">
