@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { bundledSeasons } from "@/data/archive";
 import { castPresets } from "@/data/casts";
-import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, resetOpeningSelection } from "@/domain/picks";
+import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, overrideRoster, resetOpeningSelection } from "@/domain/picks";
 import { cleanRows, correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
 import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
 import { addRule, applyCast, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
@@ -530,6 +530,17 @@ export async function resetDraftAction(_: ActionState, fd: FormData): Promise<Ac
   const r = await mutate(seasonId, (s, _at, ctx) => ({ ...resetOpeningSelection(s, ctx.actor), message: "The draft was undone and the season is back in setup." }));
   if (r.error) return r;
   redirect(`/admin/${seasonId}/setup`);
+}
+
+/** The commissioner's roster override, for bugs, mistakes and league rulings (see overrideRoster). */
+export async function overrideRosterAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return mutate(str(fd, "seasonId"), (s, at, ctx) => {
+    const o = { teamId: str(fd, "teamId"), slot: Number(str(fd, "slot")), castawayId: str(fd, "castawayId"), mode: str(fd, "mode") === "swap" ? ("swap" as const) : ("draft" as const), skipChecks: str(fd, "skipChecks") === "on", reason: str(fd, "reason") };
+    const r = overrideRoster(s, o, ctx.actor, at);
+    const team = s.teams.find((t) => t.id === o.teamId)!;
+    const name = s.castaways.find((c) => c.id === o.castawayId)!.name;
+    return { ...r, message: o.mode === "draft" ? `${team.member}'s ${s.slots[o.slot].name} pick is now ${name}, from the start.` : `${name} joins ${team.member}'s team in the ${s.slots[o.slot].name} slot from the next episode.` };
+  });
 }
 
 /**

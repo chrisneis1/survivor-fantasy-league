@@ -90,6 +90,90 @@ export function draftResetBlock(season: Season): string | null {
   return null;
 }
 
+export interface RosterOverride {
+  teamId: string;
+  slot: number;
+  castawayId: string;
+  /**
+   * "draft": correct the drafted pick itself, so it counts from the start (past episodes rescore).
+   * "swap": a free swap from the next unpublished episode on; earlier episodes keep the roster they had.
+   */
+  mode: "draft" | "swap";
+  /** The override switch: skip the usual checks (slot tribe, ownership cap, already out of the game). */
+  skipChecks: boolean;
+  reason: string;
+}
+
+/**
+ * The commissioner's override for fixing a roster: bugs, mistakes, league rulings. Needs a reason, which goes on the
+ * record. Without the override switch it runs the same checks as a normal pick; with it, only that the castaway
+ * exists and isn't already on that team.
+ */
+export function overrideRoster(season: Season, o: RosterOverride, actor: string, at: string): Result {
+  if (season.status !== "ACTIVE") throw new Error("Rosters can be overridden once the draft has finished and until the season is archived.");
+  const reason = o.reason.trim();
+  if (!reason) throw new Error("Give a reason for the override; it goes on the record.");
+  const team = season.teams.find((t) => t.id === o.teamId);
+  if (!team) throw new Error("Unknown team.");
+  if (!season.slots[o.slot]) throw new Error("Unknown slot.");
+  const castaway = season.castaways.find((c) => c.id === o.castawayId);
+  if (!castaway) throw new Error("Unknown castaway.");
+  const next = clone(season);
+  const nextTeam = next.teams.find((t) => t.id === o.teamId)!;
+  const slotName = season.slots[o.slot].name;
+
+  if (o.mode === "draft") {
+    const before = team.draft[o.slot];
+    if (before === o.castawayId) throw new Error(`${castaway.name} is already the drafted pick in that slot.`);
+    if (season.transactions.some((t) => t.team === o.teamId && t.slot === o.slot))
+      throw new Error("That slot has had swaps since the draft, so change it from the next episode instead.");
+    const ids = [...team.draft];
+    ids[o.slot] = o.castawayId;
+    if (ids.filter((c) => c === o.castawayId).length > 1) throw new Error(`${castaway.name} is already on this team.`);
+    if (!o.skipChecks) {
+      const firstCounting = season.episodes.find((e) => !e.excludeFromStandings)?.number ?? 1;
+      if (!isActiveAt(season, o.castawayId, firstCounting)) throw new Error(`${castaway.name} was out of the game before the draft counted.`);
+      const problem = rosterProblem(season, o.teamId, ids);
+      if (problem) throw new Error(problem);
+    }
+    nextTeam.draft[o.slot] = o.castawayId;
+    const pick = next.opening.picks.find((p) => p.team === o.teamId && p.slot === o.slot);
+    if (pick) pick.castaway = o.castawayId;
+    return { season: next, audit: [ev(season, actor, "team", o.teamId, "OVERRIDE_DRAFT_PICK", { slot: slotName, from: before, to: o.castawayId, skipChecks: o.skipChecks }, reason)] };
+  }
+
+  const effective = latestPublished(season) + 1;
+  if (effective > season.episodes.length) throw new Error("Every episode is published, so there's no next episode for a swap to start from.");
+  if (effective === 1) throw new Error("Nothing has been published yet, so change the drafted pick instead.");
+  const roster = effectiveRoster(season, o.teamId, effective);
+  const out = roster[o.slot];
+  if (out === o.castawayId) throw new Error(`${castaway.name} is already in that slot.`);
+  if (roster.includes(o.castawayId)) throw new Error(`${castaway.name} is already on this team.`);
+  if (!o.skipChecks) {
+    if (!isActiveAt(season, o.castawayId, effective)) throw new Error(`${castaway.name} is out of the game.`);
+    const need = season.slots[o.slot].restrictionTribeId;
+    if (need && season.slots[o.slot].enforceOnSwap && castaway.initialTribeId !== need) throw new Error(`The ${slotName} slot needs a ${season.tribes.find((t) => t.id === need)?.name ?? need} castaway.`);
+    const owners = ownerCount(season, o.castawayId, effective);
+    if (owners >= season.config.ownershipCap) throw new Error(`${castaway.name} is already on ${owners} teams (cap ${season.config.ownershipCap}).`);
+  }
+  const tx: Transaction = {
+    id: `tx${season.transactions.length + 1}-override`,
+    team: o.teamId,
+    slot: o.slot,
+    out,
+    in: o.castawayId,
+    windowAfterEpisode: effective - 1,
+    effectiveEpisode: effective,
+    order: season.transactions.reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1,
+    free: true,
+    note: `Commissioner override: ${reason}`,
+    at,
+    by: actor,
+  };
+  next.transactions.push(tx);
+  return { season: next, audit: [ev(season, actor, "transaction", tx.id, "OVERRIDE_SWAP", { slot: slotName, out, in: o.castawayId, effectiveEpisode: effective, skipChecks: o.skipChecks }, reason)] };
+}
+
 /** True when the team that's up in the opening draft has no legal castaway for any of its open slots. */
 export function openingTurnStuck(season: Season): boolean {
   const turn = openingTurn(season);
