@@ -33,6 +33,17 @@ const exitLabel: Record<StatusType, string> = {
   OTHER_EXIT: "Other exit",
 };
 
+/** Team-challenge rules everyone on a tribe scores together; the grid offers a one-tap fill per tribe for these. */
+const TRIBE_RULES = ["teamImmunity", "rewardImmunity", "reward"];
+
+/** One tribe-wide result: a checkbox rule (no option) or one option of a choice rule. */
+interface TribeFill {
+  rule: ScoringRule;
+  option: number | undefined;
+  label: string;
+  points: number;
+}
+
 const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
 
 /** One checkbox in a same-cell group. Checking one unchecks the rest; checking the checked one clears it (unless `clearable` is false, for tribe — a castaway is always on exactly one). `big` is the touch-sized version for phones. */
@@ -291,6 +302,29 @@ export function ScoringGrid({
   }, []);
   const chosenRule = rules.find((r) => r.key === mobileRule);
 
+  // Tribe results: one button per team-challenge result that ticks it for everyone on that tribe right now (pressing
+  // it again clears it), so a tribe win is one tap instead of ten.
+  const tribeFills = TRIBE_RULES.flatMap((key): TribeFill[] => {
+    const r = rules.find((x) => x.key === key);
+    if (!r) return [];
+    if (r.inputType === "boolean") return r.points[phase] === null ? [] : [{ rule: r, option: undefined, label: r.name, points: r.points[phase]! }];
+    if (r.inputType !== "choice") return [];
+    return (r.options ?? []).flatMap((o, i) => {
+      const p = optionPoints(o, phase);
+      return p === null ? [] : [{ rule: r, option: i, label: `${r.name}: ${o.label}`, points: p }];
+    });
+  });
+  const tribeMembers = (tribeId: string) => castaways.filter((c) => tribeOf(c.id) === tribeId);
+  const filled = (id: string, f: TribeFill) => {
+    const input = rowOf(id).inputs[f.rule.key];
+    return f.option === undefined ? !!input?.on : input?.option === f.option;
+  };
+  const fillTribe = (tribeId: string, f: TribeFill) => {
+    const members = tribeMembers(tribeId);
+    const clear = members.every((c) => filled(c.id, f));
+    for (const c of members) setInput(c.id, f.rule.key, f.option === undefined ? { on: !clear } : { option: clear ? undefined : f.option });
+  };
+
   const headTh = "sticky top-0 z-20 bg-surface-2 px-2 py-2 align-bottom";
   const headCornerTh = "sticky top-0 z-30 bg-surface-2 px-3 py-2";
 
@@ -301,6 +335,41 @@ export function ScoringGrid({
           <p className="mb-1 font-semibold text-accent">Not publishable yet</p>
           <ul className="list-disc pl-5 text-muted">{blockers.map((b) => <li key={b}>{b}</li>)}</ul>
         </div>
+      ) : null}
+
+      {tribeFills.length ? (
+        <section aria-label="Tribe results" className="mb-4 rounded-2xl border border-line bg-surface p-3">
+          <h3 className="eyebrow mb-1 text-muted">Tribe results</h3>
+          <p className="mb-2 text-xs text-muted">Fills a result in for everyone on the tribe right now. Press it again to clear it.</p>
+          <div className="grid gap-2">
+            {tribes.map((t) => {
+              const members = tribeMembers(t.id);
+              if (!members.length) return null;
+              return (
+                <div key={t.id} role="group" aria-label={`${t.name} results`} className="flex flex-wrap items-center gap-1.5">
+                  <span className="flex w-24 shrink-0 items-center gap-1.5 text-sm font-semibold">
+                    <span aria-hidden className="size-2.5 rounded-full" style={{ background: t.color }} />
+                    {t.name}
+                  </span>
+                  {tribeFills.map((f) => {
+                    const on = members.every((c) => filled(c.id, f));
+                    return (
+                      <button
+                        key={`${f.rule.key}:${f.option ?? ""}`}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => fillTribe(t.id, f)}
+                        className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${on ? "border-accent bg-accent text-accent-ink" : "border-line-strong bg-bg-2 hover:border-accent"}`}
+                      >
+                        {f.label} <span className="num font-normal">({signed(f.points)})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
 
       {/* A bounded, independently scrolling grid: the header row and the first two columns stay put in both

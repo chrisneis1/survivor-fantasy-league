@@ -1,6 +1,6 @@
 // Fills fields added after a season was first stored, so older documents keep loading.
 import { rulePublished, switchCountAndCheckbox } from "./template";
-import type { Season, WagerConfig } from "./types";
+import type { ScoringRule, Season, WagerConfig } from "./types";
 
 /**
  * The league scores "Vote correctly" as a checkbox (commissioner's call, September 2026). Applied once to any season
@@ -8,6 +8,24 @@ import type { Season, WagerConfig } from "./types";
  * `migrations`, so a commissioner who switches it back in Setup keeps their choice.
  */
 const VOTE_CORRECT_CHECKBOX = "vote-correct-checkbox";
+
+/**
+ * A challenge for reward and immunity together pays 3, and a tiered one 3 / 2 / 0 (commissioner's call, October 2026).
+ * Added once, right after Team immunity win, to any season still being played that scores team immunity.
+ */
+const REWARD_IMMUNITY_RULE = "reward-immunity-rule";
+export const REWARD_IMMUNITY: ScoringRule = {
+  key: "rewardImmunity",
+  name: "Reward + immunity win (team)",
+  category: "Challenges",
+  inputType: "choice",
+  points: { "pre-merge": 3, "post-merge": null, finale: null },
+  options: [
+    { label: "Won / 1st", points: { "pre-merge": 3 } },
+    { label: "2nd", points: { "pre-merge": 2 } },
+  ],
+  note: "One challenge for reward and immunity together: score it here instead of under Reward and Team immunity. Tiered placement pays 3/2/0.",
+};
 
 /** Defaults for a season's wager. The league wagers up to 30 points at a 1:1 payout. */
 export const DEFAULT_WAGER: WagerConfig = { minStake: 1, maxStake: 30, correctMultiplier: 1, wrongMultiplier: 1, winnerRule: "winner" };
@@ -33,6 +51,11 @@ export function migrateSeason(raw: Season): Season {
       rule.note = "Tick when they voted for the person eliminated. An extra vote cast correctly: add its points under Manual adjustment.";
     }
     season.migrations = [...(season.migrations ?? []), VOTE_CORRECT_CHECKBOX];
+  }
+  if (season.status !== "ARCHIVED" && !(season.migrations ?? []).includes(REWARD_IMMUNITY_RULE)) {
+    const at = season.rules.findIndex((r) => r.key === "teamImmunity");
+    if (at >= 0 && !season.rules.some((r) => r.key === REWARD_IMMUNITY.key)) season.rules.splice(at + 1, 0, structuredClone(REWARD_IMMUNITY));
+    season.migrations = [...(season.migrations ?? []), REWARD_IMMUNITY_RULE];
   }
   return season;
 }
