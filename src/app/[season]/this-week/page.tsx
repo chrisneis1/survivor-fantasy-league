@@ -27,6 +27,8 @@ interface QueueRow {
   openSlots: number;
   status: QueueStatus;
   note?: string;
+  /** Why a tied team sits where it does. */
+  tie?: string;
 }
 
 /** Availability rows for the board: league-wide capacity from the engine, plus where each castaway is now. */
@@ -91,7 +93,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
   const climber = [...snapshot].filter((r) => (r.movement ?? 0) > 0).sort((a, b) => (b.movement ?? 0) - (a.movement ?? 0))[0];
 
   const rows: QueueRow[] = pw
-    ? pw.turns.map((t) => ({ sequence: t.sequence, teamId: t.teamId, pointsAtOpen: t.pointsAtOpen, rankAtOpen: t.rankAtOpen, openSlots: t.openSlots, status: t.status, note: t.skipReason }))
+    ? pw.turns.map((t) => ({ sequence: t.sequence, teamId: t.teamId, pointsAtOpen: t.pointsAtOpen, rankAtOpen: t.rankAtOpen, openSlots: t.openSlots, status: t.status, note: t.skipReason, tie: t.tieDrawn ? "tie, order drawn at random" : undefined }))
     : buildPickQueue(season, W).map((e) => ({
         sequence: e.sequence,
         teamId: e.teamId,
@@ -100,6 +102,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
         openSlots: e.openSlots,
         status: picksByTeam(e.teamId).length ? "COMPLETED" : e.eligible ? "PASSED" : "AUTO_SKIPPED",
         note: e.eligible ? undefined : e.skipReason,
+        tie: e.tied && season.config.pickOrderTieRule === "RANDOM_DRAW" ? "tied, order drawn at random when the window opens" : undefined,
       }));
   const skipped = rows.filter((r) => r.status === "AUTO_SKIPPED").length;
   const remaining = rows.filter((r) => r.status === "WAITING" || r.status === "UP_NOW").length;
@@ -232,7 +235,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
                   label={archivedView && e.status === "PASSED" ? "No pick recorded" : undefined}
                   team={t.name}
                   member={t.member}
-                  meta={<><span className="num">{e.pointsAtOpen}</span> pts · rank <span className="num">{e.rankAtOpen}</span></>}
+                  meta={<><span className="num">{e.pointsAtOpen}</span> pts · rank <span className="num">{e.rankAtOpen}</span>{e.tie ? ` · ${e.tie}` : ""}</>}
                   mine={e.teamId === me}
                 >
                   {mine.length ? (

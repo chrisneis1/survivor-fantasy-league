@@ -3,7 +3,9 @@
 export type Phase = "pre-merge" | "post-merge" | "finale";
 export type RosterPolicy = "EFFECTIVE" | "ORIGINAL_DRAFT" | "SNAPSHOT_AS_OF";
 export type StatusType = "VOTED_OUT" | "MEDICAL_EVACUATION" | "QUIT" | "OTHER_EXIT";
-export type PickTieRule = "OPENING_SEED_REVERSE";
+/** How teams tied on points are ordered in a pick window: by later opening-draft position, or by a random draw made
+ * once when the window opens (the league's rule from Survivor 51). */
+export type PickTieRule = "OPENING_SEED_REVERSE" | "RANDOM_DRAW";
 
 export interface Tribe {
   id: string;
@@ -248,6 +250,10 @@ export interface QueueEntry {
   /** Replaceable slots at window open. */
   openSlots: number;
   skipReason?: string;
+  /** Tied on points with another team that picks in the same group, so the tie rule decided their order. */
+  tied: boolean;
+  /** The tie was settled by a random draw (only when one was made, i.e. as the window opened). */
+  drawn?: boolean;
 }
 
 export interface Availability {
@@ -332,6 +338,8 @@ export interface PickTurn {
   rankAtOpen: number;
   openSlots: number;
   eligible: boolean;
+  /** Tied on points with another team in its group, and placed by the random draw made when the window opened. */
+  tieDrawn?: boolean;
   status: QueueStatus;
   picks: number;
   startedAt?: string;

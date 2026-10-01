@@ -298,16 +298,18 @@ export function windowBlock(season: Season, afterEpisode: number): string | null
  * The commissioner opens the window after `afterEpisode`. The reverse-standings queue is frozen now and is never
  * re-sorted, even if a score is corrected later (guide §5.2). There is no time limit on any turn.
  */
-export function openPickWindow(season: Season, afterEpisode: number, at: string, actor: string): Result {
+/** Opens the pick window after an episode, fixing its queue. Ties on points under RANDOM_DRAW are drawn here, once. */
+export function openPickWindow(season: Season, afterEpisode: number, at: string, actor: string, random: () => number = Math.random): Result {
   const block = windowBlock(season, afterEpisode);
   if (block) throw new Error(block);
-  const turns: PickTurn[] = buildPickQueue(season, afterEpisode).map((q) => ({
+  const turns: PickTurn[] = buildPickQueue(season, afterEpisode, random).map((q) => ({
     sequence: q.sequence,
     teamId: q.teamId,
     pointsAtOpen: q.pointsAtOpen,
     rankAtOpen: q.rankAtOpen,
     openSlots: q.openSlots,
     eligible: q.eligible,
+    ...(q.drawn ? { tieDrawn: true } : {}),
     status: q.eligible ? "WAITING" : "AUTO_SKIPPED",
     picks: 0,
     ...(q.eligible ? {} : { skipReason: q.skipReason }),
@@ -315,7 +317,7 @@ export function openPickWindow(season: Season, afterEpisode: number, at: string,
   const window: PickWindow = { id: `w${afterEpisode}`, afterEpisode, status: "OPEN", openedAt: at, turns };
   const next = clone(season);
   next.windows.push(window);
-  return { season: advance(next, at), audit: [ev(season, actor, "pick_window", window.id, "OPEN", { afterEpisode, queue: turns.map((t) => t.teamId) })] };
+  return { season: advance(next, at), audit: [ev(season, actor, "pick_window", window.id, "OPEN", { afterEpisode, queue: turns.map((t) => t.teamId), ...(turns.some((t) => t.tieDrawn) ? { tieDrawn: turns.filter((t) => t.tieDrawn).map((t) => t.teamId) } : {}) })] };
 }
 
 /**

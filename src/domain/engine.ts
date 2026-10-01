@@ -217,8 +217,10 @@ export function availability(season: Season, episode: number): Availability[] {
 /**
  * Snapshot of the reverse-standings queue for the window opened after `afterEpisode`: lowest official total first,
  * ties resolved by the configured rule (never alphabetical). Tied teams keep their shared standings rank.
+ * Under RANDOM_DRAW, pass `random` to make the draw (opening the window does, once); without it, tied teams are shown
+ * in opening-seed order as a placeholder and marked tied.
  */
-export function buildPickQueue(season: Season, afterEpisode: number): QueueEntry[] {
+export function buildPickQueue(season: Season, afterEpisode: number, random?: () => number): QueueEntry[] {
   const rows = standings(season, afterEpisode);
   const seed = season.config.openingSeed;
   const seedPos = (teamId: string) => {
@@ -231,10 +233,18 @@ export function buildPickQueue(season: Season, afterEpisode: number): QueueEntry
   // skipped windows come after them. Within each group, lowest points act first.
   const lostNow = (teamId: string) =>
     effectiveRoster(season, teamId, afterEpisode).some((c) => c && isActiveAt(season, c, afterEpisode) && !isActiveAt(season, c, effectiveAt));
+  const group = (teamId: string, total: number) => `${lostNow(teamId) ? 0 : 1}:${total}`;
+  const groupSize = new Map<string, number>();
+  for (const r of rows) groupSize.set(group(r.teamId, r.total), (groupSize.get(group(r.teamId, r.total)) ?? 0) + 1);
+  const tied = (row: { teamId: string; total: number }) => (groupSize.get(group(row.teamId, row.total)) ?? 0) > 1;
+  // RANDOM_DRAW: every team (in team-list order) draws a number once; within a tie, the lower draw picks first.
+  const drawing = season.config.pickOrderTieRule === "RANDOM_DRAW" && !!random;
+  const draw = new Map(drawing ? season.teams.map((t) => [t.id, random!()]) : []);
   const ordered = [...rows].sort((a, b) => {
     const la = lostNow(a.teamId), lb = lostNow(b.teamId);
     if (la !== lb) return la ? -1 : 1;
     if (a.total !== b.total) return a.total - b.total;
+    if (drawing) return draw.get(a.teamId)! - draw.get(b.teamId)!;
     // OPENING_SEED_REVERSE: the later opening seed acts first, mirroring the catch-up principle.
     return seedPos(b.teamId) - seedPos(a.teamId);
   });
@@ -258,6 +268,8 @@ export function buildPickQueue(season: Season, afterEpisode: number): QueueEntry
       eligible,
       openSlots,
       skipReason: eligible ? undefined : openSlots === 0 ? "No eligible pick — no replaceable slot" : "No eligible pick — no swap credits left",
+      tied: tied(row),
+      ...(drawing && tied(row) ? { drawn: true } : {}),
     };
   });
 }
