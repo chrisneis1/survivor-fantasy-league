@@ -32,6 +32,8 @@ export function scoringBrief(season: Season, episode: number) {
             rows: draft.rows.map((r) => ({ name: season.castaways.find((c) => c.id === r.castaway)?.name ?? r.castaway, ...r })),
           }
         : null,
+      // A published episode's official scoring, for a run that checks the commissioner's work against its research.
+      published: ep.state === "PUBLISHED" ? publishedRows(season, episode) : null,
     },
     rules: rulesForPhase(season, ep.phase).map((r) => ({
       key: r.key,
@@ -55,6 +57,19 @@ export function scoringBrief(season: Season, episode: number) {
       note: "note: one message for the commissioner — sources used, and anything the recaps didn't settle that they should check before publishing.",
     },
   };
+}
+
+/** Each castaway's published points for an episode (by rule, with notes) and anyone who left the game in it. */
+function publishedRows(season: Season, episode: number) {
+  const name = (id: string) => season.castaways.find((c) => c.id === id)?.name ?? id;
+  const ids = new Set([...season.scores.filter((x) => x.episode === episode).map((x) => x.castaway), ...season.statusEvents.filter((e) => e.afterEpisode === episode).map((e) => e.castaway)]);
+  return season.castaways
+    .filter((c) => ids.has(c.id))
+    .map((c) => {
+      const entries = season.scores.find((x) => x.episode === episode && x.castaway === c.id)?.entries ?? [];
+      const exit = season.statusEvents.find((e) => e.castaway === c.id && e.afterEpisode === episode);
+      return { name: name(c.id), castaway: c.id, total: entries.reduce((t, e) => t + e.points, 0), entries, ...(exit ? { exit: { type: exit.type, ...(exit.note ? { note: exit.note } : {}) } } : {}) };
+    });
 }
 
 export class AutoScoringError extends Error {

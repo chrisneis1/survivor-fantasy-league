@@ -43,6 +43,21 @@ test("the brief lists this phase's rules and only the castaways still in the gam
   const outIds = new Set(s.statusEvents.map((e) => e.castaway));
   assert.ok(b.castaways.length > 0 && b.castaways.every((c) => !outIds.has(c.id)));
   assert.equal(b.alreadyOut.length, outIds.size);
+  assert.equal(b.episode.published, null);
+});
+
+test("a published episode's brief shows its official scoring, so a run can check it", () => {
+  const s = season();
+  const p = scoringBrief(s, CUT).episode.published!;
+  const scored = s.scores.filter((x) => x.episode === CUT);
+  const out = s.statusEvents.filter((e) => e.afterEpisode === CUT);
+  assert.ok(p.length >= scored.length && p.length > 0);
+  for (const row of scored) {
+    const shown = p.find((r) => r.castaway === row.castaway)!;
+    assert.equal(shown.total, row.entries.reduce((t, e) => t + e.points, 0));
+    assert.equal(shown.name, s.castaways.find((c) => c.id === row.castaway)!.name);
+  }
+  for (const e of out) assert.equal(p.find((r) => r.castaway === e.castaway)!.exit!.type, e.type);
 });
 
 test("saves scoring as progress by castaway name, with the notes, and publishes nothing", () => {
