@@ -22,7 +22,16 @@ export function scoringBrief(season: Season, episode: number) {
       phase: ep.phase,
       state: ep.state,
       excludeFromStandings: !!ep.excludeFromStandings,
-      savedProgress: draft ? { savedAt: draft.savedAt, savedBy: draft.savedBy ?? "commissioner", byAutoScorer: draft.savedBy === AUTO_SCORER } : null,
+      // What's saved, so a run (or the commissioner) can compare its research against it.
+      savedProgress: draft
+        ? {
+            savedAt: draft.savedAt,
+            savedBy: draft.savedBy ?? "commissioner",
+            byAutoScorer: draft.savedBy === AUTO_SCORER,
+            ...(draft.note ? { note: draft.note } : {}),
+            rows: draft.rows.map((r) => ({ name: season.castaways.find((c) => c.id === r.castaway)?.name ?? r.castaway, ...r })),
+          }
+        : null,
     },
     rules: rulesForPhase(season, ep.phase).map((r) => ({
       key: r.key,
