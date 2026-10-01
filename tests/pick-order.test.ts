@@ -72,3 +72,44 @@ test("two castaways can't both be scored as the season winner", () => {
   const one = saveDraft(s, { episode: 1, rows: [{ castaway: "a", inputs: { [rule]: { on: true } } }] }, at);
   assert.equal(publishEpisode(one, 1, "t").season.episodes[0].state, "PUBLISHED");
 });
+
+test("teams tied on points are ordered by a random draw when the window opens, then the order is fixed", async () => {
+  const { openPickWindow } = await import("../src/domain/picks");
+  const { migrateSeason } = await import("../src/domain/migrate");
+  let s = createSeason(ref, "ties-51", "Ties 51");
+  const ids = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"];
+  s.castaways = ids.map((id, i) => ({ id, name: id, initialTribeId: "cila", order: i + 1 }));
+  s.slots = [{ id: "s1", name: "S1", restrictionTribeId: null, enforceOnSwap: false }];
+  s.teams = ["x", "y", "z"].map((id, i) => ({ id, member: id, name: id, draft: [ids[i]] }));
+  s.config.openingSeed = ["x", "y", "z"];
+  s.config.ownershipCap = 2;
+  s.status = "ACTIVE";
+  s.episodes = s.episodes.slice(0, 3);
+  // x and y both lose their castaway with 0 points: a tie. z loses theirs with 4 points.
+  s = saveDraft(s, { episode: 1, rows: [
+    { castaway: "c1", inputs: {}, exit: { type: "VOTED_OUT" } },
+    { castaway: "c2", inputs: {}, exit: { type: "VOTED_OUT" } },
+    { castaway: "c3", inputs: { extra: { points: 4, note: "t" } }, exit: { type: "VOTED_OUT" } },
+  ] }, at);
+  s = publishEpisode(s, 1, "t").season;
+  s = migrateSeason(s);
+  assert.equal(s.config.pickOrderTieRule, "RANDOM_DRAW", "seasons being played draw ties");
+
+  const preview = buildPickQueue(s, 1);
+  assert.deepEqual(preview.map((e) => [e.teamId, e.tied, e.drawn]), [["y", true, undefined], ["x", true, undefined], ["z", false, undefined]], "before the draw: seed order, marked tied");
+
+  const queue = (draws: number[]) => {
+    const r = openPickWindow(s, 1, at, "admin", () => draws.shift()!);
+    return { order: r.season.windows[0].turns.map((t) => t.teamId), turns: r.season.windows[0].turns, audit: r.audit[0] };
+  };
+  // Draws are taken in team-list order (x, y, z); the lower draw picks first within a tie.
+  assert.deepEqual(queue([0.9, 0.1, 0.5]).order, ["y", "x", "z"]);
+  const xFirst = queue([0.1, 0.9, 0.5]);
+  assert.deepEqual(xFirst.order, ["x", "y", "z"], "the draw, not the opening seed, decides");
+  assert.deepEqual(xFirst.turns.map((t) => !!t.tieDrawn), [true, true, false]);
+  assert.deepEqual((xFirst.audit.after as { tieDrawn: string[] }).tieDrawn, ["x", "y"]);
+
+  // Finished seasons keep the rule they were played under.
+  const old = { ...structuredClone(s), status: "ARCHIVED" as const, migrations: [], config: { ...s.config, pickOrderTieRule: "OPENING_SEED_REVERSE" as const } };
+  assert.equal(migrateSeason(old).config.pickOrderTieRule, "OPENING_SEED_REVERSE");
+});

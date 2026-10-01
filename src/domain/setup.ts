@@ -28,7 +28,7 @@ export function createSeason(prev: Season | null, id: string, name: string): Sea
           ownershipCap: 3,
           swapCreditLimit: null,
           openingSeedMethod: "MANUAL_LIST",
-          pickOrderTieRule: "OPENING_SEED_REVERSE",
+          pickOrderTieRule: "RANDOM_DRAW",
           openingSeed: [],
           openingRoundMode: "SNAKE",
           freeReplacementStatuses: ["MEDICAL_EVACUATION"],

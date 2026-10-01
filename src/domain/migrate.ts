@@ -27,6 +27,12 @@ export const REWARD_IMMUNITY: ScoringRule = {
   note: "One challenge for reward and immunity together: score it here instead of under Reward and Team immunity. Tiered placement pays 3/2/0.",
 };
 
+/**
+ * Teams tied on points in a pick window are ordered by a random draw (commissioner's call, October 2026), not by
+ * opening-draft position. Applied once to seasons still being played; finished seasons keep the rule they used.
+ */
+const RANDOM_PICK_TIES = "random-pick-ties";
+
 /** Defaults for a season's wager. The league wagers up to 30 points at a 1:1 payout. */
 export const DEFAULT_WAGER: WagerConfig = { minStake: 1, maxStake: 30, correctMultiplier: 1, wrongMultiplier: 1, winnerRule: "winner" };
 
@@ -56,6 +62,10 @@ export function migrateSeason(raw: Season): Season {
     const at = season.rules.findIndex((r) => r.key === "teamImmunity");
     if (at >= 0 && !season.rules.some((r) => r.key === REWARD_IMMUNITY.key)) season.rules.splice(at + 1, 0, structuredClone(REWARD_IMMUNITY));
     season.migrations = [...(season.migrations ?? []), REWARD_IMMUNITY_RULE];
+  }
+  if (season.status !== "ARCHIVED" && !(season.migrations ?? []).includes(RANDOM_PICK_TIES)) {
+    season.config.pickOrderTieRule = "RANDOM_DRAW";
+    season.migrations = [...(season.migrations ?? []), RANDOM_PICK_TIES];
   }
   return season;
 }

@@ -358,7 +358,7 @@ export async function SetupBody({ season }: { season: Season }) {
               <ActionForm action={saveSeedAction} submit="Save opening order">
                 <Hidden season={season} />
                 <h3 className="font-semibold">Opening pick order</h3>
-                <p className="-mt-2 text-sm text-muted">The commissioner sets who picks first. The first position drafts first, and the order reverses each round (position 1, 2, 3 means round 2 runs 3, 2, 1). This order also breaks ties for weekly pick order (later position picks first).</p>
+                <p className="-mt-2 text-sm text-muted">The commissioner sets who picks first. The first position drafts first, and the order reverses each round (position 1, 2, 3 means round 2 runs 3, 2, 1). {season.config.pickOrderTieRule === "RANDOM_DRAW" ? "Ties in weekly pick order are settled by a random draw when the window opens." : "This order also breaks ties for weekly pick order (later position picks first)."}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {season.teams.map((t) => (
                     <label key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-1.5 text-sm">

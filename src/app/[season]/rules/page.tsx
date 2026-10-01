@@ -106,7 +106,7 @@ export default async function Rules({ params }: { params: Promise<{ season: stri
               <li>There&apos;s no time limit on a turn. The league picks at its own pace, since members watch on different days.</li>
             </ol>
             <Card tone="raised" className="grid gap-1.5 p-4 text-sm">
-              <p><strong className="text-ink">Ties.</strong> Tied teams keep the same displayed rank. For pick order only, {c.pickOrderTieRule === "OPENING_SEED_REVERSE" ? "the team with the later opening-draft position picks first" : "the configured tie rule applies"}.</p>
+              <p><strong className="text-ink">Ties.</strong> Tied teams keep the same displayed rank. For pick order only, {c.pickOrderTieRule === "RANDOM_DRAW" ? "teams tied on points are put in order by a random draw when the pick window opens" : "the team with the later opening-draft position picks first"}.</p>
               <p><strong className="text-ink">Swap credits.</strong> {c.swapCreditLimit === null ? "Not recorded for this season" : `${c.swapCreditLimit} per team`}. A free pick, such as after a medical evacuation, uses no credit.</p>
               <p><strong className="text-ink">Timezone.</strong> Times are interpreted in the league timezone: {c.timezone.replace("_", " ")}.</p>
             </Card>
