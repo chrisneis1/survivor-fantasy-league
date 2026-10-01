@@ -69,6 +69,12 @@ test("saves scoring as progress by castaway name, with the notes, and publishes 
   assert.equal(next.scores.length, s.scores.length);
   assert.equal(next.statusEvents.length, s.statusEvents.length, "the exit waits for the commissioner to publish");
 
+  // The brief shows what's saved, by castaway name.
+  const saved = scoringBrief(next, 8).episode.savedProgress!;
+  assert.equal(saved.byAutoScorer, true);
+  assert.deepEqual(saved.rows.map((r) => r.name), [a.name, b.name]);
+  assert.equal(saved.rows[0].inputs.individualImmunity.on, true);
+
   // Running again replaces its own earlier save.
   const again = saveAutoScoring(next, 8, { rows: [{ castaway: a.id, inputs: { individualImmunity: { on: true } } }] }, at);
   assert.equal(again.drafts.find((d) => d.episode === 8)!.rows.length, 1);
