@@ -241,6 +241,34 @@ test("the commissioner scores the premiere before the draft", async ({ page }) =
   expect(errors).toEqual([]);
 });
 
+test("one tap fills a tribe's challenge result for everyone on it", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signInAsAdmin(page);
+  await page.goto("/admin/survivor-51");
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Score before the draft" }).click();
+  await expect(page).toHaveURL(/\/admin\/survivor-51\/score\/2$/);
+
+  const toka = page.getByRole("group", { name: "Toka results" });
+  const won = toka.getByRole("button", { name: /^Reward \+ immunity win \(team\): Won \/ 1st/ });
+  await won.click();
+  await expect(won).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "By rule" }).click();
+  await page.getByLabel("Rule", { exact: true }).selectOption("rewardImmunity");
+  const tokaRows = page.getByRole("region", { name: "Toka" }).getByRole("checkbox", { name: /: Won \/ 1st$/ });
+  const savuRows = page.getByRole("region", { name: "Savu" }).getByRole("checkbox", { name: /: Won \/ 1st$/ });
+  expect(await tokaRows.count()).toBeGreaterThan(5);
+  for (const box of await tokaRows.all()) await expect(box).toBeChecked();
+  for (const box of await savuRows.all()) await expect(box).not.toBeChecked();
+  // Tiered: 2nd for Savu, at 2 points each; pressing Toka's again clears it.
+  await page.getByRole("group", { name: "Savu results" }).getByRole("button", { name: /: 2nd \(\+2\)$/ }).click();
+  for (const box of await page.getByRole("region", { name: "Savu" }).getByRole("checkbox", { name: /: 2nd$/ }).all()) await expect(box).toBeChecked();
+  await won.click();
+  await expect(won).toHaveAttribute("aria-pressed", "false");
+  for (const box of await tokaRows.all()) await expect(box).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
 test("the weekly auto-scorer saves progress for the commissioner to review, and can't publish", async ({ page, request }) => {
   const url = "/api/auto-scoring/demo-active/9";
   const auth = { Authorization: `Bearer ${SCORING_TOKEN}` };
