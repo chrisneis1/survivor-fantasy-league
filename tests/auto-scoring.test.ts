@@ -132,3 +132,18 @@ test("rejects anything the scoring grid would flag, and saves nothing", () => {
   assert.ok(e.problems.some((p) => /note/i.test(p)), "a manual adjustment needs a note");
   assert.ok(e.problems.some((p) => /already left the game/.test(p)));
 });
+
+test("records a tribe move, by tribe name, and it takes effect when the commissioner publishes", async () => {
+  const { publishEpisode } = await import("../src/domain/scoring");
+  const { currentTribeId } = await import("../src/domain/engine");
+  const s = season();
+  const brief = scoringBrief(s, 8);
+  const mover = brief.castaways[0];
+  const to = brief.tribes.find((t) => t.name !== mover.tribe)!;
+  const next = saveAutoScoring(s, 8, { rows: [{ castaway: mover.name, inputs: {}, tribe: to.name.toUpperCase() }] }, at);
+  assert.equal(next.drafts.find((d) => d.episode === 8)!.rows[0].tribe, to.id);
+  assert.notEqual(currentTribeId(next, mover.id, 8), to.id, "nothing moves until it's published");
+  const published = publishEpisode(next, 8, "admin").season;
+  assert.equal(currentTribeId(published, mover.id, 8), to.id);
+  assert.match(errorOf(() => saveAutoScoring(s, 8, { rows: [{ castaway: mover.id, inputs: {}, tribe: "Atlantis" }] }, at)).problems.join(), /unknown tribe "Atlantis"/);
+});
