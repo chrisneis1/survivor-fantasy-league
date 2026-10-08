@@ -50,9 +50,11 @@ export function scoringBrief(season: Season, episode: number) {
     alreadyOut: season.castaways
       .filter((c) => !isActiveAt(season, c.id, episode))
       .map((c) => ({ id: c.id, name: c.name, afterEpisode: statusEventFor(season, c.id)!.afterEpisode, how: statusEventFor(season, c.id)!.type })),
+    tribes: season.tribes.map((t) => ({ id: t.id, name: t.name })),
     exitTypes: statusTypes,
     howToSend: {
-      rows: "One row per castaway who scored or left the game: { castaway: id or name, inputs: { [rule key]: input }, exit?: { type, note? } }.",
+      rows: "One row per castaway who scored, left the game or changed tribe: { castaway: id or name, inputs: { [rule key]: input }, exit?: { type, note? }, tribe?: id or name }.",
+      tribe: "tribe: only when the castaway moved tribe in this episode (a swap, mutiny or merge): the tribe they're on now. It takes effect from this episode when the commissioner publishes.",
       inputs: "boolean rule: { on: true }; quantity rule: { quantity: n }; choice rule: { option: index }; manual rule: { points: n, note: required }. Any input can carry a note (a source, or what to check).",
       note: "note: one message for the commissioner — sources used, and anything the recaps didn't settle that they should check before publishing.",
     },
@@ -83,7 +85,7 @@ export class AutoScoringError extends Error {
 }
 
 export interface AutoScoringInput {
-  rows: { castaway: string; inputs?: Record<string, RuleInput>; exit?: { type: StatusType; note?: string } }[];
+  rows: { castaway: string; inputs?: Record<string, RuleInput>; exit?: { type: StatusType; note?: string }; tribe?: string }[];
   note?: string;
 }
 
@@ -115,7 +117,11 @@ export function saveAutoScoring(season: Season, episode: number, input: AutoScor
     }
     for (const key of Object.keys(raw.inputs ?? {})) if (!season.rules.some((r) => r.key === key)) problems.push(`${given}: unknown rule "${key}".`);
     if (raw.exit && !statusTypes.includes(raw.exit.type)) problems.push(`${given}: unknown exit type "${raw.exit.type}".`);
-    rows.push({ castaway: id, inputs: raw.inputs ?? {}, ...(raw.exit ? { exit: raw.exit } : {}) });
+    // A tribe move, by tribe id or name.
+    const tribeGiven = typeof raw.tribe === "string" ? raw.tribe.trim().toLowerCase() : "";
+    const tribe = tribeGiven ? season.tribes.find((t) => t.id === tribeGiven || t.name.trim().toLowerCase() === tribeGiven)?.id : undefined;
+    if (tribeGiven && !tribe) problems.push(`${given}: unknown tribe "${raw.tribe}".`);
+    rows.push({ castaway: id, inputs: raw.inputs ?? {}, ...(raw.exit ? { exit: raw.exit } : {}), ...(tribe ? { tribe } : {}) });
   }
   const clean = cleanRows(season, rows);
   const seen = new Set<string>();
