@@ -1,4 +1,5 @@
 // Fills fields added after a season was first stored, so older documents keep loading.
+import { requeueOpenWindow } from "./picks";
 import { rulePublished, switchCountAndCheckbox } from "./template";
 import type { ScoringRule, Season, WagerConfig } from "./types";
 
@@ -33,6 +34,12 @@ export const REWARD_IMMUNITY: ScoringRule = {
  */
 const RANDOM_PICK_TIES = "random-pick-ties";
 
+/**
+ * Pick windows run in rounds by the order castaways left, one turn per castaway to replace (commissioner's call,
+ * October 2026). Applied once: a window already open with one turn per team, and nobody picked yet, is re-queued.
+ */
+const PICK_TURNS_PER_CASTAWAY = "pick-turns-per-castaway";
+
 /** Defaults for a season's wager. The league wagers up to 30 points at a 1:1 payout. */
 export const DEFAULT_WAGER: WagerConfig = { minStake: 1, maxStake: 30, correctMultiplier: 1, wrongMultiplier: 1, winnerRule: "winner" };
 
@@ -66,6 +73,10 @@ export function migrateSeason(raw: Season): Season {
   if (season.status !== "ARCHIVED" && !(season.migrations ?? []).includes(RANDOM_PICK_TIES)) {
     season.config.pickOrderTieRule = "RANDOM_DRAW";
     season.migrations = [...(season.migrations ?? []), RANDOM_PICK_TIES];
+  }
+  if (season.status !== "ARCHIVED" && !(season.migrations ?? []).includes(PICK_TURNS_PER_CASTAWAY)) {
+    season.migrations = [...(season.migrations ?? []), PICK_TURNS_PER_CASTAWAY];
+    return requeueOpenWindow(season);
   }
   return season;
 }

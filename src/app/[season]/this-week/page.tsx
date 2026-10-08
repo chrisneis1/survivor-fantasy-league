@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
 import { AvailabilityBoard, type AvailabilityRow } from "@/components/availability-board";
+import { CopyButton } from "@/components/copy-button";
 import { IconArrowRight, IconFlame, IconPlay, IconTrendUp, IconUsers, IconWeek, IconX } from "@/components/icons";
 import { ActivityItem, QueueItem, StandingsMini, SwapLine } from "@/components/league";
 import { SeasonShell } from "@/components/shell";
@@ -29,6 +30,8 @@ interface QueueRow {
   note?: string;
   /** Why a tied team sits where it does. */
   tie?: string;
+  /** The castaway this turn replaces. */
+  out?: string;
 }
 
 /** Availability rows for the board: league-wide capacity from the engine, plus where each castaway is now. */
@@ -93,16 +96,17 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
   const climber = [...snapshot].filter((r) => (r.movement ?? 0) > 0).sort((a, b) => (b.movement ?? 0) - (a.movement ?? 0))[0];
 
   const rows: QueueRow[] = pw
-    ? pw.turns.map((t) => ({ sequence: t.sequence, teamId: t.teamId, pointsAtOpen: t.pointsAtOpen, rankAtOpen: t.rankAtOpen, openSlots: t.openSlots, status: t.status, note: t.skipReason, tie: t.tieDrawn ? "tie, order drawn at random" : undefined }))
+    ? pw.turns.map((t) => ({ sequence: t.sequence, teamId: t.teamId, pointsAtOpen: t.pointsAtOpen, rankAtOpen: t.rankAtOpen, openSlots: t.openSlots, status: t.status, note: t.skipReason, tie: t.tieDrawn ? "tie, order drawn at random" : undefined, out: t.out }))
     : buildPickQueue(season, W).map((e) => ({
         sequence: e.sequence,
         teamId: e.teamId,
         pointsAtOpen: e.pointsAtOpen,
         rankAtOpen: e.rankAtOpen,
         openSlots: e.openSlots,
-        status: picksByTeam(e.teamId).length ? "COMPLETED" : e.eligible ? "PASSED" : "AUTO_SKIPPED",
+        status: picksByTeam(e.teamId).some((p) => e.out === undefined || p.out === e.out) ? "COMPLETED" : e.eligible ? "PASSED" : "AUTO_SKIPPED",
         note: e.eligible ? undefined : e.skipReason,
         tie: e.tied && season.config.pickOrderTieRule === "RANDOM_DRAW" ? "tied, order drawn at random when the window opens" : undefined,
+        out: e.out,
       }));
   const skipped = rows.filter((r) => r.status === "AUTO_SKIPPED").length;
   const remaining = rows.filter((r) => r.status === "WAITING" || r.status === "UP_NOW").length;
@@ -118,8 +122,23 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
   const cap = season.config.ownershipCap;
 
   const up = pw && currentTurn(pw);
-  const origin = admin && up ? await siteOrigin() : "";
-  const mineInQueue = me ? rows.find((r) => r.teamId === me) : undefined;
+  // A turn replaces one castaway (older windows: all of a team's open slots in one turn).
+  const upRemaining = up ? (up.slot !== undefined ? 1 : picksRemaining(season, up.teamId, effectiveEp)) : 0;
+  const origin = up ? await siteOrigin() : "";
+  // A message for the league's group chat: the last pick, who's up, and who's next.
+  const who = (teamId: string) => `${teamOf(season, teamId).member} (${teamOf(season, teamId).name})`;
+  const next = up ? pw!.turns.find((t) => t.status === "WAITING" && t.sequence > up.sequence) : undefined;
+  const lastPick = picks.at(-1);
+  const chatText = up
+    ? [
+        `${season.name}: picks after ${episodeLabel(season, W)}`,
+        ...(lastPick ? [`Last pick: ${teamOf(season, lastPick.team).member} took ${castawayName(season, lastPick.in)} for ${castawayName(season, lastPick.out)}`] : []),
+        `Up now: ${who(up.teamId)}${up.out ? `, replacing ${castawayName(season, up.out)}` : ""}`,
+        next ? `Next up: ${who(next.teamId)}${next.out ? `, replacing ${castawayName(season, next.out)}` : ""}` : "Next up: nobody, this is the last pick",
+        `Pick here: ${origin}${seasonPath(season.id, "/my")}`,
+      ].join("\n")
+    : "";
+  const mineInQueue = me ? (rows.find((r) => r.teamId === me && (r.status === "UP_NOW" || r.status === "WAITING")) ?? rows.find((r) => r.teamId === me)) : undefined;
 
   return (
     <SeasonShell season={season} active="/this-week">
@@ -184,7 +203,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
                 {me === up.teamId ? <YouBadge /> : null}
               </p>
               <p className="text-sm text-ink-2">
-                {teamOf(season, up.teamId).member} · {plural(up.picks, "pick")} made · {plural(picksRemaining(season, up.teamId, effectiveEp), "replacement")} available · no time limit
+                {teamOf(season, up.teamId).member}{up.out ? ` · replacing ${castawayName(season, up.out)}` : ""} · {plural(up.picks, "pick")} made · {plural(upRemaining, "replacement")} available · no time limit
               </p>
             </div>
             {me === up.teamId ? (
@@ -193,13 +212,16 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
               </Link>
             ) : null}
           </div>
+          <div className="mt-3">
+            <CopyButton text={chatText} label="Copy for the group chat" />
+          </div>
           {admin ? (
             <div className="mt-4 grid gap-3 border-t border-accent/25 pt-4">
               <p className="eyebrow text-muted">Commissioner</p>
               <div className="flex flex-wrap items-center gap-2">
                 <a
                   className={btnGhostCls}
-                  href={reminderMailto({ member: teamOf(season, up.teamId).member, seasonName: season.name, what: `make your pick${picksRemaining(season, up.teamId, effectiveEp) > 1 ? "s" : ""} after ${episodeLabel(season, W)}`, url: `${origin}${seasonPath(season.id, "/my")}` })}
+                  href={reminderMailto({ member: teamOf(season, up.teamId).member, seasonName: season.name, what: `make your pick${upRemaining > 1 ? "s" : ""}${up.out ? ` to replace ${castawayName(season, up.out)}` : ""} after ${episodeLabel(season, W)}`, url: `${origin}${seasonPath(season.id, "/my")}` })}
                 >
                   ✉ Email a reminder
                 </a>
@@ -219,23 +241,24 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         <section aria-labelledby="queue-title">
-          <SectionHeader id="queue-title" aside={mineInQueue ? <span className="flex items-center gap-1.5">You pick <strong className="num text-ink">#{mineInQueue.sequence}</strong></span> : "Fewest points picks first"}>
+          <SectionHeader id="queue-title" aside={mineInQueue ? <span className="flex items-center gap-1.5">You pick <strong className="num text-ink">#{mineInQueue.sequence}</strong></span> : "In order of who left; fewest points first"}>
             Pick order
           </SectionHeader>
           <ol>
             {rows.map((e) => {
-              const mine = picksByTeam(e.teamId);
+              // A turn shows the pick that filled its own slot (older windows: every pick the team made).
+              const mine = picksByTeam(e.teamId).filter((p) => e.out === undefined || p.out === e.out);
               const t = teamOf(season, e.teamId);
               return (
                 <QueueItem
-                  key={e.teamId}
+                  key={e.sequence}
                   position={e.sequence}
                   status={e.status}
                   // An archived window only records who picked; a team with no pick may have passed or run out of time.
                   label={archivedView && e.status === "PASSED" ? "No pick recorded" : undefined}
                   team={t.name}
                   member={t.member}
-                  meta={<><span className="num">{e.pointsAtOpen}</span> pts · rank <span className="num">{e.rankAtOpen}</span>{e.tie ? ` · ${e.tie}` : ""}</>}
+                  meta={<>{e.out ? <>Replacing {castawayName(season, e.out)} · </> : null}<span className="num">{e.pointsAtOpen}</span> pts · rank <span className="num">{e.rankAtOpen}</span>{e.tie ? ` · ${e.tie}` : ""}</>}
                   mine={e.teamId === me}
                 >
                   {mine.length ? (

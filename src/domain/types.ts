@@ -128,6 +128,8 @@ export interface StatusEvent {
   afterEpisode: number;
   type: StatusType;
   note?: string;
+  /** When several castaways left in one episode: where this exit came (1 = first). Sets the pick window's rounds. */
+  order?: number;
 }
 
 export interface Wager {
@@ -247,8 +249,11 @@ export interface QueueEntry {
   pointsAtOpen: number;
   rankAtOpen: number;
   eligible: boolean;
-  /** Replaceable slots at window open. */
+  /** Replaceable slots at window open: 1 for a turn that replaces one castaway, 0 for a team with nothing to replace. */
   openSlots: number;
+  /** The slot this turn fills, and the castaway who left it. */
+  slot?: number;
+  out?: string;
   skipReason?: string;
   /** Tied on points with another team that picks in the same group, so the tie rule decided their order. */
   tied: boolean;
@@ -281,7 +286,8 @@ export interface RuleInput {
 export interface DraftRow {
   castaway: string;
   inputs: Record<string, RuleInput>;
-  exit?: { type: StatusType; note?: string };
+  /** `order`: when several castaways left this episode, where this exit came (1 = first). */
+  exit?: { type: StatusType; note?: string; order?: number };
   /** The tribe currently checked for this castaway in the grid. */
   tribe?: string;
 }
@@ -337,6 +343,12 @@ export interface PickTurn {
   pointsAtOpen: number;
   rankAtOpen: number;
   openSlots: number;
+  /**
+   * The slot this turn fills and the castaway who left it: one turn per castaway to replace, so a team that lost two
+   * picks in two rounds. Absent on windows opened before that, where one turn covered all of a team's open slots.
+   */
+  slot?: number;
+  out?: string;
   eligible: boolean;
   /** Tied on points with another team in its group, and placed by the random draw made when the window opened. */
   tieDrawn?: boolean;

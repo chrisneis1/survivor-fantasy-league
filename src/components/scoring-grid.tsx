@@ -1,6 +1,7 @@
 "use client";
 import { useId, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { sortExits } from "@/domain/engine";
 import { cellKey, resolveInput, resolveRow, optionPoints, statusTypes } from "@/domain/scoring";
 import type { DraftRow, Phase, RuleInput, ScoringRule, StatusType } from "@/domain/types";
 import { editScoringAction, publishEpisodeAction, saveScoringAction } from "@/server/actions";
@@ -43,6 +44,8 @@ interface TribeFill {
   label: string;
   points: number;
 }
+
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 
 const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
 
@@ -124,7 +127,7 @@ export function ScoringGrid({
     if (key === "exit") {
       setRows((prev) => {
         const row = prev[id] ?? { castaway: id, inputs: {} };
-        return { ...prev, [id]: { ...row, exit: next ? { type: next as StatusType } : undefined } };
+        return { ...prev, [id]: { ...row, exit: next ? { ...row.exit, type: next as StatusType } : undefined } };
       });
     } else {
       // Always include `option` in the patch, even when clearing: setInput merges the patch onto the
@@ -132,6 +135,24 @@ export function ScoringGrid({
       // and the checkbox could never be unchecked.
       setInput(id, key, { option: next === undefined ? undefined : Number(next) });
     }
+  };
+  // Everyone marked as leaving this episode, in the order they left. With two or more, the commissioner can set that
+  // order (it decides the pick window's rounds); moving one renumbers them all, so the order is always 1, 2, 3…
+  const exited = sortExits(castaways.filter((c) => rowOf(c.id).exit).map((c) => ({ id: c.id, ...rowOf(c.id).exit! })));
+  const exitPos = (id: string) => exited.findIndex((e) => e.id === id) + 1;
+  const setExitOrder = (id: string, position: number) => {
+    const ids = exited.map((e) => e.id).filter((x) => x !== id);
+    ids.splice(position - 1, 0, id);
+    setDirty(true);
+    if (mode === "edit") setTouched((prev) => new Set([...prev, ...ids.map((x) => cellKey(x, "exit"))]));
+    setRows((prev) => {
+      const out = { ...prev };
+      ids.forEach((x, i) => {
+        const row = out[x] ?? { castaway: x, inputs: {} };
+        if (row.exit) out[x] = { ...row, exit: { ...row.exit, order: i + 1 } };
+      });
+      return out;
+    });
   };
   const setTribe = (id: string, tribeId: string) => {
     setDirty(true);
@@ -286,6 +307,20 @@ export function ScoringGrid({
           />
         ))}
       </div>
+      {exited.length > 1 && exitPos(c.id) ? (
+        <label className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+          Left
+          <select
+            aria-label={`Order ${c.name} left the game`}
+            value={exitPos(c.id)}
+            disabled={exitsLocked}
+            onChange={(e) => setExitOrder(c.id, Number(e.target.value))}
+            className={`${inputCls} w-auto px-2 py-1 text-xs`}
+          >
+            {exited.map((_, i) => <option key={i} value={i + 1}>{ordinal(i + 1)}</option>)}
+          </select>
+        </label>
+      ) : null}
       {exitsLocked ? <p className="mt-1 text-[11px] text-muted">A pick window already used this result.</p> : null}
     </>
   );
