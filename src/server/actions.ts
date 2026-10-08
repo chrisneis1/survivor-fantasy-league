@@ -681,7 +681,7 @@ export async function replacementAction(seasonId: string, slot: number, castaway
     seasonId,
     (s, at, ctx) => {
       const r = makeReplacement(s, ctx.team!, intOf(slot), String(castaway), ctx.actor, at);
-      return { ...r, message: "Replacement made." };
+      return { ...r, message: "Replacement made. Now copy the update below into the group chat!" };
     },
     "member",
   );

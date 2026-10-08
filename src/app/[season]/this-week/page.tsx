@@ -13,6 +13,7 @@ import { availability, buildPickQueue, castawaySeasonTotal, currentTribeId, late
 import { currentTurn, openWindow, openingSequence, openingTurn, picksRemaining } from "@/domain/picks";
 import type { QueueStatus, Season } from "@/domain/types";
 import { episodeLabel, plural, seasonPath } from "@/lib/format";
+import { pickChatText } from "@/lib/chat";
 import { reminderMailto, siteOrigin } from "@/lib/mail";
 import { castawayName, exitLabel, teamOf } from "@/lib/view";
 import { closeWindowAction, skipTurnAction } from "@/server/actions";
@@ -126,18 +127,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
   const upRemaining = up ? (up.slot !== undefined ? 1 : picksRemaining(season, up.teamId, effectiveEp)) : 0;
   const origin = up ? await siteOrigin() : "";
   // A message for the league's group chat: the last pick, who's up, and who's next.
-  const who = (teamId: string) => `${teamOf(season, teamId).member} (${teamOf(season, teamId).name})`;
-  const next = up ? pw!.turns.find((t) => t.status === "WAITING" && t.sequence > up.sequence) : undefined;
-  const lastPick = picks.at(-1);
-  const chatText = up
-    ? [
-        `${season.name}: picks after ${episodeLabel(season, W)}`,
-        ...(lastPick ? [`Last pick: ${teamOf(season, lastPick.team).member} took ${castawayName(season, lastPick.in)} for ${castawayName(season, lastPick.out)}`] : []),
-        `Up now: ${who(up.teamId)}${up.out ? `, replacing ${castawayName(season, up.out)}` : ""}`,
-        next ? `Next up: ${who(next.teamId)}${next.out ? `, replacing ${castawayName(season, next.out)}` : ""}` : "Next up: nobody, this is the last pick",
-        `Pick here: ${origin}${seasonPath(season.id, "/my")}`,
-      ].join("\n")
-    : "";
+  const chatText = up ? pickChatText(season, pw!, origin) : "";
   const mineInQueue = me ? (rows.find((r) => r.teamId === me && (r.status === "UP_NOW" || r.status === "WAITING")) ?? rows.find((r) => r.teamId === me)) : undefined;
 
   return (

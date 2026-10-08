@@ -82,6 +82,10 @@ test("a player makes a replacement pick", async ({ page }) => {
   // Its only open slot is filled, so the turn ends: the castaway joins the roster and the picker goes away.
   await expect(page.getByRole("listitem").filter({ hasText: castaway }).filter({ hasText: "slot" }).first()).toBeVisible();
   await expect(page.getByText("You're up")).toBeHidden();
+  // Straight after picking: a big nudge to tell the group chat, with the update ready to copy.
+  await expect(page.getByText("Pick locked in! Tell the group chat")).toBeVisible();
+  await expect(page.getByText(new RegExp(`Last pick: .+ took ${castaway}`))).toBeVisible();
+  await expect(page.getByRole("button", { name: /Copy & paste this in the group chat/ })).toBeVisible();
 
   // The pick shows up publicly straight away.
   await page.goto("/demo-active/this-week");

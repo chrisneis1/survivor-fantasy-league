@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
+import { CopyButton } from "@/components/copy-button";
 import { btnCls, btnGhostCls, inputCls } from "@/components/styles";
 import { PickPanel } from "@/components/pick-panel";
 import { SeasonShell } from "@/components/shell";
@@ -10,7 +11,9 @@ import { Card, EmptyState, PageHeader, RankBadge, StatCard, StatusBadge, Section
 import { getSeason } from "@/data";
 import { currentTribeId, effectiveRoster, isActiveAt, latestPublished, standings, statusEventFor } from "@/domain/engine";
 import { currentTurn, openWindow, openingSequence, openingTurn, openingTurnStuck, picksRemaining, teamTurn } from "@/domain/picks";
+import { pickChatText } from "@/lib/chat";
 import { episodeLabel, plural, seasonPath } from "@/lib/format";
+import { siteOrigin } from "@/lib/mail";
 import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, exitLabel, teamOf } from "@/lib/view";
 import { wagerCandidates, wagerDeadlineEpisode } from "@/domain/wager";
@@ -65,6 +68,12 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
   const swapsUsed = season.transactions.filter((t) => t.team === teamId && !t.free).length;
   const limit = season.config.swapCreditLimit;
   const myTx = season.transactions.filter((t) => t.team === teamId).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+  // Just picked (nobody has picked since): nudge them to tell the league, with the group-chat update ready to copy.
+  const lastWin = season.windows.at(-1);
+  const lastPick = lastWin ? season.transactions.filter((t) => t.windowAfterEpisode === lastWin.afterEpisode).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).at(-1) : undefined;
+  // (A window their pick closed keeps the nudge for a day.)
+  const recent = !!lastWin && (lastWin.status === "OPEN" || Date.now() - Date.parse(lastWin.closedAt ?? "") < 24 * 3600 * 1000);
+  const shareText = lastWin && recent && lastPick?.team === teamId ? pickChatText(season, lastWin, await siteOrigin()) : "";
 
   return (
     <SeasonShell season={season} active="/my">
@@ -82,6 +91,17 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
           <StatCard label="Points" value={latestPublished(season) ? row.total : "—"} sub={latestPublished(season) ? `through ${episodeLabel(season, latestPublished(season))}` : "Not scored yet"} />
           <StatCard label="Swaps used" value={<>{swapsUsed}{limit === null ? null : <span className="text-base text-muted"> / {limit}</span>}</>} sub={limit === null ? "no credit limit recorded" : "swap credits"} />
         </div>
+      ) : null}
+
+      {shareText ? (
+        <Card tone="accent" className="mb-6 p-4 sm:p-5">
+          <p className="display text-xl font-extrabold uppercase leading-tight sm:text-2xl">Pick locked in! Tell the group chat</p>
+          <p className="mt-1 text-sm text-ink-2">Tap the button, then paste it in the league chat so the next person knows they're up.</p>
+          <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-bg-2 p-3 font-sans text-sm">{shareText}</pre>
+          <div className="mt-3">
+            <CopyButton text={shareText} label="📋 Copy & paste this in the group chat!" className={`${btnCls} w-full sm:w-auto`} />
+          </div>
+        </Card>
       ) : null}
 
       {/* The action comes first on a phone: banner, then the picker, then everything else. */}
