@@ -261,11 +261,23 @@ export function replacementCheck(season: Season, teamId: string, slot: number, i
   return { ok: true, free };
 }
 
-/** Does this team have at least one legal replacement available right now? */
-export function hasLegalPick(season: Season, teamId: string, episode: number): boolean {
-  for (const slot of replaceableSlots(season, teamId, episode))
+/** Does this team have at least one legal replacement available right now (in `slots`, if given)? */
+export function hasLegalPick(season: Season, teamId: string, episode: number, slots?: number[]): boolean {
+  for (const slot of slots ?? replaceableSlots(season, teamId, episode))
     for (const c of season.castaways) if (replacementCheck(season, teamId, slot, c.id, episode).ok) return true;
   return false;
+}
+
+/** The slots a turn may fill: its own slot, or (on a window opened before turns were per castaway) any open slot. */
+export function turnSlots(season: Season, turn: PickTurn, episode: number): number[] {
+  const open = replaceableSlots(season, turn.teamId, episode);
+  return turn.slot === undefined ? open : open.filter((s) => s === turn.slot);
+}
+
+/** A team's turn to show it: the one it's on now, else its next one, else its last. */
+export function teamTurn(w: PickWindow, teamId: string): PickTurn | undefined {
+  const mine = w.turns.filter((t) => t.teamId === teamId);
+  return mine.find((t) => t.status === "UP_NOW") ?? mine.find((t) => t.status === "WAITING") ?? mine.at(-1);
 }
 
 /** How many more replacements the team could make, bounded by open slots and swap credits/free entitlements. */
@@ -280,6 +292,48 @@ export function picksRemaining(season: Season, teamId: string, episode: number):
 
 export const currentTurn = (w: PickWindow) => w.turns.find((t) => t.status === "UP_NOW");
 export const openWindow = (season: Season) => season.windows.find((w) => w.status === "OPEN");
+
+/** A saved turn for one queue entry. */
+function turnFrom(q: ReturnType<typeof buildPickQueue>[number]): PickTurn {
+  return {
+    sequence: q.sequence,
+    teamId: q.teamId,
+    pointsAtOpen: q.pointsAtOpen,
+    rankAtOpen: q.rankAtOpen,
+    openSlots: q.openSlots,
+    ...(q.out !== undefined ? { slot: q.slot, out: q.out } : {}),
+    eligible: q.eligible,
+    ...(q.drawn ? { tieDrawn: true } : {}),
+    status: q.eligible ? "WAITING" : "AUTO_SKIPPED",
+    picks: 0,
+    ...(q.eligible ? {} : { skipReason: q.skipReason }),
+  };
+}
+
+/** A fixed pseudo-random sequence from a string, so a queue re-drawn on load comes out the same every time. */
+function seededRandom(text: string): () => number {
+  let h = 2166136261;
+  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return () => {
+    h = (h + 0x6d2b79f5) | 0;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Rebuilds the open window's queue as one turn per castaway to replace, in rounds by the order castaways left — for a
+ * window opened with one turn per team, as long as nobody has picked in it yet. Otherwise returns the season as is.
+ */
+export function requeueOpenWindow(season: Season): Season {
+  const w = openWindow(season);
+  if (!w || w.turns.some((t) => t.slot !== undefined || t.picks > 0) || season.transactions.some((t) => t.windowAfterEpisode === w.afterEpisode)) return season;
+  const next = clone(season);
+  const nw = openWindow(next)!;
+  nw.turns = buildPickQueue(next, nw.afterEpisode, seededRandom(`${next.id}:${nw.id}`)).map(turnFrom);
+  return advance(next, nw.openedAt);
+}
 
 /** Why the commissioner cannot open a pick window after `afterEpisode` right now, or null if they can. */
 export function windowBlock(season: Season, afterEpisode: number): string | null {
@@ -302,18 +356,7 @@ export function windowBlock(season: Season, afterEpisode: number): string | null
 export function openPickWindow(season: Season, afterEpisode: number, at: string, actor: string, random: () => number = Math.random): Result {
   const block = windowBlock(season, afterEpisode);
   if (block) throw new Error(block);
-  const turns: PickTurn[] = buildPickQueue(season, afterEpisode, random).map((q) => ({
-    sequence: q.sequence,
-    teamId: q.teamId,
-    pointsAtOpen: q.pointsAtOpen,
-    rankAtOpen: q.rankAtOpen,
-    openSlots: q.openSlots,
-    eligible: q.eligible,
-    ...(q.drawn ? { tieDrawn: true } : {}),
-    status: q.eligible ? "WAITING" : "AUTO_SKIPPED",
-    picks: 0,
-    ...(q.eligible ? {} : { skipReason: q.skipReason }),
-  }));
+  const turns = buildPickQueue(season, afterEpisode, random).map(turnFrom);
   const window: PickWindow = { id: `w${afterEpisode}`, afterEpisode, status: "OPEN", openedAt: at, turns };
   const next = clone(season);
   next.windows.push(window);
@@ -337,7 +380,7 @@ export function advance(season: Season, at: string): Season {
         w.closedAt = at;
         break;
       }
-      if (!hasLegalPick(next, waiting.teamId, episode)) {
+      if (!hasLegalPick(next, waiting.teamId, episode, turnSlots(next, waiting, episode))) {
         waiting.status = "AUTO_SKIPPED";
         waiting.skipReason = "No eligible pick when its turn came";
         continue;
@@ -358,8 +401,11 @@ function turnFor(season: Season, teamId: string): { window: PickWindow; turn: Pi
 
 /** One replacement in the current team's turn. The team stays Up Now while it still has a legal pick. */
 export function makeReplacement(season: Season, teamId: string, slot: number, incoming: string, actor: string, at: string, reason?: string): Result {
-  const { window: w0 } = turnFor(season, teamId);
+  const { window: w0, turn: t0 } = turnFor(season, teamId);
   const episode = w0.afterEpisode + 1;
+  if (t0.slot !== undefined && slot !== t0.slot) {
+    throw new Error(`This turn replaces ${season.castaways.find((c) => c.id === t0.out)?.name ?? "another castaway"}; your other open slot gets its own turn.`);
+  }
   const legal = replacementCheck(season, teamId, slot, incoming, episode);
   if (!legal.ok) throw new Error(legal.reason);
 
@@ -383,8 +429,8 @@ export function makeReplacement(season: Season, teamId: string, slot: number, in
   next.transactions.push(tx);
   turn.picks += 1;
   const audit = [ev(season, actor, "roster", teamId, "REPLACE", { slot: season.slots[slot].name, out: outgoing, in: incoming, free: !!legal.free, window: window.id }, reason)];
-  // Out of legal picks (no open slot, no credits, nobody left to take): the turn ends by itself.
-  if (!hasLegalPick(next, teamId, episode)) {
+  // Out of legal picks (its slot filled, no credits, nobody left to take): the turn ends by itself.
+  if (!hasLegalPick(next, teamId, episode, turnSlots(next, turn, episode))) {
     turn.status = "COMPLETED";
     turn.completedAt = at;
   }

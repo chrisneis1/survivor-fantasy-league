@@ -9,7 +9,7 @@ import { RosterSlot, SwapLine } from "@/components/league";
 import { Card, EmptyState, PageHeader, RankBadge, StatCard, StatusBadge, SectionHeader } from "@/components/ui";
 import { getSeason } from "@/data";
 import { currentTribeId, effectiveRoster, isActiveAt, latestPublished, standings, statusEventFor } from "@/domain/engine";
-import { currentTurn, openWindow, openingSequence, openingTurn, openingTurnStuck, picksRemaining } from "@/domain/picks";
+import { currentTurn, openWindow, openingSequence, openingTurn, openingTurnStuck, picksRemaining, teamTurn } from "@/domain/picks";
 import { episodeLabel, plural, seasonPath } from "@/lib/format";
 import { openingPanel, replacementPanel } from "@/lib/picker";
 import { castawayName, exitLabel, teamOf } from "@/lib/view";
@@ -59,7 +59,9 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
   const effEp = win ? win.afterEpisode + 1 : latestPublished(season) + 1;
   const roster = season.status === "OPENING_SELECTION" ? team.draft : effectiveRoster(season, teamId, Math.min(effEp, season.episodes.length));
   const row = standings(season).find((r) => r.teamId === teamId);
-  const myTurns = win?.turns.find((t) => t.teamId === teamId);
+  const myTurns = win ? teamTurn(win, teamId) : undefined;
+  // A turn replaces one castaway (older windows: all of a team's open slots in one turn).
+  const turnRemaining = turn?.slot !== undefined ? 1 : picksRemaining(season, teamId, effEp);
   const swapsUsed = season.transactions.filter((t) => t.team === teamId && !t.free).length;
   const limit = season.config.swapCreditLimit;
   const myTx = season.transactions.filter((t) => t.team === teamId).sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
@@ -112,14 +114,14 @@ export default async function MyTeam({ params }: { params: Promise<{ season: str
             </p>
             <p className="mt-1 text-sm text-muted">
               {myTurnToSwap
-                ? `You can make ${plural(picksRemaining(season, teamId, effEp), "replacement")}. There's no time limit; finish with Done when you're happy.`
+                ? `${turn?.out ? `Replace ${castawayName(season, turn.out)}. ` : ""}You can make ${plural(turnRemaining, "replacement")} this turn. There's no time limit; finish with Done when you're happy.`
                 : turn
                   ? `${teamOf(season, turn.teamId).member} is picking${myTurns?.status === "WAITING" ? `. You're number ${myTurns.sequence} in the saved order.` : "."}`
                   : "The window is wrapping up."}
               {myTurns?.skipReason && !myTurnToSwap ? ` ${myTurns.skipReason}.` : ""}
             </p>
           </Card>
-          {myTurnToSwap ? <PickPanel seasonId={season.id} mode="replace" remaining={picksRemaining(season, teamId, effEp)} {...replacementPanel(season, teamId, effEp)} /> : null}
+          {myTurnToSwap ? <PickPanel seasonId={season.id} mode="replace" remaining={turnRemaining} {...replacementPanel(season, teamId, effEp, turn?.slot)} /> : null}
         </section>
       ) : null}
 

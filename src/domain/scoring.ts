@@ -113,7 +113,11 @@ export function cleanRows(s: Season, rows: DraftRow[]): DraftRow[] {
       if (typeof v.note === "string" && v.note.trim()) i.note = v.note.trim().slice(0, 300);
       if (Object.keys(i).length) inputs[k] = i;
     }
-    const exit = r.exit && statusTypes.includes(r.exit.type as StatusType) ? { type: r.exit.type, ...(r.exit.note?.trim() ? { note: r.exit.note.trim().slice(0, 300) } : {}) } : undefined;
+    const order = Number(r.exit?.order);
+    const exit =
+      r.exit && statusTypes.includes(r.exit.type as StatusType)
+        ? { type: r.exit.type, ...(r.exit.note?.trim() ? { note: r.exit.note.trim().slice(0, 300) } : {}), ...(Number.isInteger(order) && order >= 1 && order <= 30 ? { order } : {}) }
+        : undefined;
     const tribe = typeof r.tribe === "string" && s.tribes.some((t) => t.id === r.tribe) ? r.tribe : undefined;
     if (Object.keys(inputs).length || exit || tribe) out.push({ castaway: r.castaway, inputs, ...(exit ? { exit } : {}), ...(tribe ? { tribe } : {}) });
   }
@@ -198,7 +202,7 @@ export function publishEpisode(season: Season, episode: number, actor: string): 
       next.scores.push({ episode, castaway: row.castaway, entries });
       publishedRows.push({ castaway: row.castaway, total });
     }
-    if (row.exit) next.statusEvents.push({ castaway: row.castaway, afterEpisode: episode, type: row.exit.type, ...(row.exit.note ? { note: row.exit.note } : {}) });
+    if (row.exit) next.statusEvents.push({ castaway: row.castaway, afterEpisode: episode, type: row.exit.type, ...(row.exit.note ? { note: row.exit.note } : {}), ...(row.exit.order ? { order: row.exit.order } : {}) });
     if (row.tribe) {
       if (!next.tribes.some((t) => t.id === row.tribe)) throw new Error(`Unknown tribe "${row.tribe}".`);
       if (row.tribe !== tribeBeforeEpisode(next, row.castaway, episode)) next.tribeSwaps.push({ castaway: row.castaway, episode, tribeId: row.tribe });
@@ -316,7 +320,7 @@ export function rowsFromPublished(season: Season, episodeNumber: number): DraftR
         }
       }
       const exit = season.statusEvents.find((e) => e.castaway === c.id && e.afterEpisode === episodeNumber);
-      return { castaway: c.id, inputs, tribe: currentTribeId(season, c.id, episodeNumber), ...(exit ? { exit: { type: exit.type, ...(exit.note ? { note: exit.note } : {}) } } : {}) };
+      return { castaway: c.id, inputs, tribe: currentTribeId(season, c.id, episodeNumber), ...(exit ? { exit: { type: exit.type, ...(exit.note ? { note: exit.note } : {}), ...(exit.order ? { order: exit.order } : {}) } } : {}) };
     });
 }
 
@@ -371,12 +375,14 @@ export function correctEpisode(season: Season, input: EpisodeEditInput, actor: s
     if (field === "exit") {
       const existingExit = next.statusEvents.find((e) => e.castaway === castawayId && e.afterEpisode === input.episode);
       const wantExit = row.exit;
-      const same = !!existingExit === !!wantExit && !(existingExit && wantExit && (existingExit.type !== wantExit.type || existingExit.note !== wantExit.note));
+      const same =
+        !!existingExit === !!wantExit &&
+        !(existingExit && wantExit && (existingExit.type !== wantExit.type || existingExit.note !== wantExit.note || existingExit.order !== wantExit.order));
       if (same) continue;
       if (windowOpened) throw new Error(`${castaway.name}: a pick window already used this episode's result, so who left can't be changed here. Scores can still be edited.`);
       const withExit = clone(next);
       withExit.statusEvents = withExit.statusEvents.filter((e) => !(e.castaway === castawayId && e.afterEpisode === input.episode));
-      if (wantExit) withExit.statusEvents.push({ castaway: castawayId, afterEpisode: input.episode, type: wantExit.type, ...(wantExit.note ? { note: wantExit.note } : {}) });
+      if (wantExit) withExit.statusEvents.push({ castaway: castawayId, afterEpisode: input.episode, type: wantExit.type, ...(wantExit.note ? { note: wantExit.note } : {}), ...(wantExit.order ? { order: wantExit.order } : {}) });
       next = withExit;
       changes++;
       continue;

@@ -7,6 +7,7 @@ import type { Season } from "../src/domain/types";
 import {
   availability,
   buildPickQueue,
+  exitsInOrder,
   castawayEpisodeTotal,
   competitionRanks,
   effectiveRoster,
@@ -79,18 +80,23 @@ test("a castaway is scored once and applied to every owner", () => {
   assert.equal(pts, 1);
 });
 
-test("pick queue is lowest total first with a deterministic tie rule", () => {
+test("pick queue runs in rounds by who left first, lowest total first within each, with a deterministic tie rule", () => {
   for (const w of [1, 5, 8, 11]) {
     const q = buildPickQueue(season, w);
-    assert.equal(q.length, 14);
-    // Teams that lost a castaway this episode come first; within each group, lowest points first.
-    const lost = (id: string) => effectiveRoster(season, id, w).some((c) => c && isActiveAt(season, c, w) && !isActiveAt(season, c, w + 1));
+    // One turn per open slot, plus one (auto-skipped) entry for each team with nothing to replace.
+    const open = season.teams.map((t) => effectiveRoster(season, t.id, w).filter((c) => c && !isActiveAt(season, c, w + 1)).length);
+    assert.equal(q.length, open.reduce((n, k) => n + Math.max(k, 1), 0));
+    // This episode's exits in order, then slots left open from earlier, then teams with nothing to replace.
+    const exits = exitsInOrder(season, w);
+    // A slot left open from an earlier episode goes after this episode's rounds, earliest exit first.
+    const leftAt = (c: string) => season.statusEvents.find((x) => x.castaway === c)!.afterEpisode;
+    const round = (e: (typeof q)[number]) => (e.out === undefined ? Infinity : exits.includes(e.out) ? exits.indexOf(e.out) : exits.length + leftAt(e.out) / 10_000);
     for (let i = 1; i < q.length; i++) {
       const a = q[i - 1], b = q[i];
-      if (lost(a.teamId) === lost(b.teamId)) assert.ok(a.pointsAtOpen <= b.pointsAtOpen, `window ${w} position ${i}`);
-      else assert.ok(lost(a.teamId), `window ${w} position ${i}: losers first`);
+      assert.ok(round(a) <= round(b), `window ${w} position ${i}: rounds in order`);
+      if (round(a) === round(b)) assert.ok(a.pointsAtOpen <= b.pointsAtOpen, `window ${w} position ${i}`);
     }
-    assert.deepEqual(new Set(q.map((e) => e.sequence)).size, 14);
+    assert.deepEqual(new Set(q.map((e) => e.sequence)).size, q.length);
   }
 });
 

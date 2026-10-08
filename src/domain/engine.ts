@@ -215,10 +215,28 @@ export function availability(season: Season, episode: number): Availability[] {
 // ---------- pick window queue (guide §5.2) ----------
 
 /**
- * Snapshot of the reverse-standings queue for the window opened after `afterEpisode`: lowest official total first,
- * ties resolved by the configured rule (never alphabetical). Tied teams keep their shared standings rank.
- * Under RANDOM_DRAW, pass `random` to make the draw (opening the window does, once); without it, tied teams are shown
- * in opening-seed order as a placeholder and marked tied.
+ * Orders an episode's exits by when they happened: the commissioner's order where set (1 = first); otherwise anyone
+ * who quit, was evacuated or otherwise left goes before the Tribal Council vote(s), which keep the order recorded.
+ */
+export function sortExits<T extends { type: StatusEvent["type"]; order?: number }>(exits: T[]): T[] {
+  return exits
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => (a.e.order ?? Infinity) - (b.e.order ?? Infinity) || Number(a.e.type === "VOTED_OUT") - Number(b.e.type === "VOTED_OUT") || a.i - b.i)
+    .map(({ e }) => e);
+}
+
+/** The castaways who left the game in `episode`, in the order they left (see sortExits). */
+export function exitsInOrder(season: Season, episode: number): string[] {
+  return sortExits(season.statusEvents.filter((e) => e.afterEpisode === episode)).map((e) => e.castaway);
+}
+
+/**
+ * Snapshot of the queue for the window opened after `afterEpisode`: one turn per castaway a team has to replace, in
+ * rounds that follow the order castaways left the game. Everyone who lost the episode's first castaway out picks
+ * (lowest official total first), then the order starts again for the next castaway out, and so on; slots left open
+ * from earlier windows come after that, and teams with nothing to replace are listed last. Ties within a round are
+ * resolved by the configured rule (never alphabetical). Under RANDOM_DRAW, pass `random` to make the draw (opening the
+ * window does, once); without it, tied teams are shown in opening-seed order as a placeholder and marked tied.
  */
 export function buildPickQueue(season: Season, afterEpisode: number, random?: () => number): QueueEntry[] {
   const rows = standings(season, afterEpisode);
@@ -229,47 +247,57 @@ export function buildPickQueue(season: Season, afterEpisode: number, random?: ()
     return i;
   };
   const effectiveAt = afterEpisode + 1;
-  // Teams that lost a castaway in this very episode pick first; teams whose open slots are left over from earlier
-  // skipped windows come after them. Within each group, lowest points act first.
-  const lostNow = (teamId: string) =>
-    effectiveRoster(season, teamId, afterEpisode).some((c) => c && isActiveAt(season, c, afterEpisode) && !isActiveAt(season, c, effectiveAt));
-  const group = (teamId: string, total: number) => `${lostNow(teamId) ? 0 : 1}:${total}`;
-  const groupSize = new Map<string, number>();
-  for (const r of rows) groupSize.set(group(r.teamId, r.total), (groupSize.get(group(r.teamId, r.total)) ?? 0) + 1);
-  const tied = (row: { teamId: string; total: number }) => (groupSize.get(group(row.teamId, row.total)) ?? 0) > 1;
+  const exits = exitsInOrder(season, afterEpisode);
+  // The round a lost castaway's replacement belongs to: their place in this episode's exits, or after all of them for
+  // a slot left open from an earlier episode (earliest exit first).
+  const roundOf = (castaway: string) => {
+    const k = exits.indexOf(castaway);
+    return k >= 0 ? k : exits.length + (statusEventFor(season, castaway)?.afterEpisode ?? 0) / 10_000;
+  };
+  type Item = { row: (typeof rows)[number]; slot?: number; out?: string; round: number };
+  const items: Item[] = [];
+  for (const row of rows) {
+    const roster = effectiveRoster(season, row.teamId, afterEpisode);
+    const open = roster.map((c, slot) => ({ c, slot })).filter(({ c }) => c && !isActiveAt(season, c, effectiveAt));
+    if (!open.length) items.push({ row, round: Infinity });
+    for (const { c, slot } of open) items.push({ row, slot, out: c, round: roundOf(c) });
+  }
+  const key = (it: Item) => `${it.round}:${it.row.total}`;
+  const size = new Map<string, number>();
+  for (const it of items) size.set(key(it), (size.get(key(it)) ?? 0) + 1);
+  const tied = (it: Item) => it.out !== undefined && (size.get(key(it)) ?? 0) > 1;
   // RANDOM_DRAW: every team (in team-list order) draws a number once; within a tie, the lower draw picks first.
   const drawing = season.config.pickOrderTieRule === "RANDOM_DRAW" && !!random;
   const draw = new Map(drawing ? season.teams.map((t) => [t.id, random!()]) : []);
-  const ordered = [...rows].sort((a, b) => {
-    const la = lostNow(a.teamId), lb = lostNow(b.teamId);
-    if (la !== lb) return la ? -1 : 1;
-    if (a.total !== b.total) return a.total - b.total;
-    if (drawing) return draw.get(a.teamId)! - draw.get(b.teamId)!;
+  const ordered = [...items].sort((a, b) => {
+    if (a.round !== b.round) return a.round - b.round;
+    if (a.row.total !== b.row.total) return a.row.total - b.row.total;
+    if (drawing) return draw.get(a.row.teamId)! - draw.get(b.row.teamId)!;
     // OPENING_SEED_REVERSE: the later opening seed acts first, mirroring the catch-up principle.
-    return seedPos(b.teamId) - seedPos(a.teamId);
+    return seedPos(b.row.teamId) - seedPos(a.row.teamId) || (a.slot ?? 0) - (b.slot ?? 0);
   });
-  return ordered.map((row, i) => {
-    const roster = effectiveRoster(season, row.teamId, afterEpisode);
-    const openSlots = roster.filter((c) => !isActiveAt(season, c, effectiveAt)).length;
-    const credits = season.config.swapCreditLimit;
-    const used = season.transactions.filter((t) => t.team === row.teamId && !t.free && t.windowAfterEpisode < afterEpisode).length;
-    const noCredit = credits !== null && used >= credits;
-    // A free replacement (e.g. after a medical evacuation) needs no swap credit.
-    const freeOpen = roster.filter((c) => {
-      const exit = c && !isActiveAt(season, c, effectiveAt) ? statusEventFor(season, c) : undefined;
-      return !!exit && (season.config.freeReplacementStatuses ?? []).includes(exit.type);
-    }).length;
-    const eligible = openSlots > 0 && (freeOpen > 0 || !noCredit);
+  const credits = season.config.swapCreditLimit;
+  const creditsLeft = new Map(
+    season.teams.map((t) => [t.id, credits === null ? Infinity : credits - season.transactions.filter((x) => x.team === t.id && !x.free && x.windowAfterEpisode < afterEpisode).length]),
+  );
+  return ordered.map((it, i) => {
+    // A free replacement (e.g. after a medical evacuation) needs no swap credit; any other uses one.
+    const exit = it.out ? statusEventFor(season, it.out) : undefined;
+    const free = !!exit && (season.config.freeReplacementStatuses ?? []).includes(exit.type);
+    const left = creditsLeft.get(it.row.teamId)!;
+    const eligible = it.out !== undefined && (free || left > 0);
+    if (eligible && !free) creditsLeft.set(it.row.teamId, left - 1);
     return {
       sequence: i + 1,
-      teamId: row.teamId,
-      pointsAtOpen: row.total,
-      rankAtOpen: row.rank,
+      teamId: it.row.teamId,
+      pointsAtOpen: it.row.total,
+      rankAtOpen: it.row.rank,
       eligible,
-      openSlots,
-      skipReason: eligible ? undefined : openSlots === 0 ? "No eligible pick — no replaceable slot" : "No eligible pick — no swap credits left",
-      tied: tied(row),
-      ...(drawing && tied(row) ? { drawn: true } : {}),
+      openSlots: it.out !== undefined ? 1 : 0,
+      ...(it.out !== undefined ? { slot: it.slot, out: it.out } : {}),
+      skipReason: eligible ? undefined : it.out === undefined ? "No eligible pick — no replaceable slot" : "No eligible pick — no swap credits left",
+      tied: tied(it),
+      ...(drawing && tied(it) ? { drawn: true } : {}),
     };
   });
 }

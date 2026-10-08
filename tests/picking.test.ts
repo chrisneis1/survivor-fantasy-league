@@ -174,13 +174,16 @@ test("publishing does not open a window; the commissioner does, and only once", 
   assert.throws(() => openPickWindow(o, 1, T0, "c"), /already open/);
 });
 
-test("a window freezes the queue lowest-first, ties by the configured rule, and auto-skips teams with nothing to replace", () => {
+test("a window freezes the queue in rounds by who left first, lowest points first, and auto-skips teams with nothing to replace", () => {
   const w = win(opened());
-  // x and z tie on 1 point; y has 3. Later opening seed picks first, so z comes before x. Never alphabetical.
-  assert.deepEqual(w.turns.map((t) => t.teamId), ["z", "x", "y"]);
-  assert.deepEqual(w.turns.map((t) => t.status), ["UP_NOW", "WAITING", "AUTO_SKIPPED"]);
-  assert.match(w.turns[2].skipReason!, /No eligible pick/);
-  assert.deepEqual(w.turns.map((t) => t.rankAtOpen), [2, 2, 1], "tied teams share a rank; y leads");
+  // b1's medical evacuation came before a1's vote, so b1's round (only x lost b1) goes first, then the order starts
+  // again for a1: x and z tie on 1 point, and the later opening seed picks first, so z before x. y has nothing.
+  assert.deepEqual(w.turns.map((t) => t.teamId), ["x", "z", "x", "y"]);
+  assert.deepEqual(w.turns.map((t) => t.out), ["b1", "a1", "a1", undefined]);
+  assert.deepEqual(w.turns.map((t) => t.slot), [2, 0, 0, undefined]);
+  assert.deepEqual(w.turns.map((t) => t.status), ["UP_NOW", "WAITING", "WAITING", "AUTO_SKIPPED"]);
+  assert.match(w.turns[3].skipReason!, /No eligible pick/);
+  assert.deepEqual(w.turns.map((t) => t.rankAtOpen), [2, 2, 2, 1], "tied teams share a rank; y leads");
   assert.equal("deadlineAt" in w.turns[0], false, "turns have no time limit");
 });
 
@@ -196,20 +199,21 @@ test("a window cannot open when nobody can pick, the next episode ignores swaps,
   assert.match(windowBlock(s, 2)!, /most recently published/);
 });
 
-test("only the current team can pick; a multi-pick turn stays open until the team is done", () => {
+test("only the current team can pick, and only for the castaway its turn replaces; a second loss gets a second turn", () => {
   let s = opened();
-  assert.throws(() => makeReplacement(s, "x", 0, "a3", "m", T0), /isn't this team's turn/);
-  s = makeReplacement(s, "z", 0, "a3", "m", T0).season;
-  assert.deepEqual(effectiveRoster(s, "z", 2), ["a3", "a2", "b2", "v3"]);
-  assert.equal(effectiveRoster(s, "z", 1)[0], "a1", "the earlier episode's roster is untouched");
-  assert.equal(win(s).turns[0].status, "COMPLETED", "z had one open slot, so the turn ended by itself");
-  assert.equal(currentTurn(win(s))!.teamId, "x");
-
+  assert.throws(() => makeReplacement(s, "z", 0, "a3", "m", T0), /isn't this team's turn/);
+  assert.throws(() => makeReplacement(s, "x", 0, "a3", "m", T0), /This turn replaces B1/);
   assert.equal(picksRemaining(s, "x", 2), 2);
   s = makeReplacement(s, "x", 2, "b3", "m", T0).season; // free (medical evacuation)
   assert.equal(s.transactions.at(-1)!.free, true);
-  assert.equal(currentTurn(win(s))!.teamId, "x", "x still has a slot to fill, so the queue does not advance");
-  assert.equal(picksRemaining(s, "x", 2), 1);
+  assert.equal(win(s).turns[0].status, "COMPLETED", "its slot is filled, so the turn ended by itself");
+  assert.equal(currentTurn(win(s))!.teamId, "z", "the next round starts: z before x picks again");
+
+  s = makeReplacement(s, "z", 0, "a3", "m", T0).season;
+  assert.deepEqual(effectiveRoster(s, "z", 2), ["a3", "a2", "b2", "v3"]);
+  assert.equal(effectiveRoster(s, "z", 1)[0], "a1", "the earlier episode's roster is untouched");
+  assert.equal(currentTurn(win(s))!.teamId, "x");
+  assert.equal(currentTurn(win(s))!.out, "a1");
   s = makeReplacement(s, "x", 0, "v3", "m", T0).season;
   assert.equal(openWindow(s), undefined, "everyone has acted, so the window closed");
   assert.equal(win(s).status, "CLOSED");
@@ -217,12 +221,13 @@ test("only the current team can pick; a multi-pick turn stays open until the tea
 
 test("pass ends the turn once and moves the queue on; unused picks are simply not taken", () => {
   let s = opened();
-  s = endTurn(s, "z", "m", T0).season;
-  assert.equal(win(s).turns[0].status, "PASSED");
-  assert.equal(currentTurn(win(s))!.teamId, "x");
-  s = makeReplacement(s, "x", 2, "b3", "m", T0).season;
   s = endTurn(s, "x", "m", T0).season;
+  assert.equal(win(s).turns[0].status, "PASSED");
+  assert.equal(currentTurn(win(s))!.teamId, "z");
+  s = makeReplacement(s, "z", 0, "a3", "m", T0).season;
   assert.equal(win(s).turns[1].status, "COMPLETED");
+  s = endTurn(s, "x", "m", T0).season;
+  assert.equal(win(s).turns[2].status, "PASSED");
   assert.equal(win(s).status, "CLOSED");
   assert.throws(() => endTurn(s, "x", "m", T0), /isn't this team's turn/);
 });
@@ -230,15 +235,15 @@ test("pass ends the turn once and moves the queue on; unused picks are simply no
 test("there is no time limit: a turn stays open however long it takes", () => {
   const s = opened();
   const muchLater = "2027-06-01T00:00:00.000Z";
-  const after = makeReplacement(s, "z", 0, "a3", "m", muchLater).season;
+  const after = makeReplacement(s, "x", 2, "b3", "m", muchLater).season;
   assert.equal(win(after).turns[0].status, "COMPLETED");
-  assert.equal(currentTurn(win(s))!.teamId, "z", "nothing advanced by itself");
+  assert.equal(currentTurn(win(s))!.teamId, "x", "nothing advanced by itself");
 });
 
 test("the commissioner can skip the team that is up, or close the whole window", () => {
-  let s = endTurn(opened(), "z", "commissioner", T0, { skipped: true, reason: "Away this week" }).season;
+  let s = endTurn(opened(), "x", "commissioner", T0, { skipped: true, reason: "Away this week" }).season;
   assert.equal(win(s).turns[0].skipReason, "Skipped by the commissioner");
-  assert.equal(currentTurn(win(s))!.teamId, "x");
+  assert.equal(currentTurn(win(s))!.teamId, "z");
   s = closePickWindow(s, "commissioner", T0, "Enough waiting").season;
   assert.equal(win(s).status, "CLOSED");
   assert.equal(win(s).turns[1].status, "PASSED");
@@ -257,22 +262,22 @@ test("the frozen queue does not re-sort when a score is corrected while the wind
 
 test("replacement rules: ownership cap, duplicates, eliminated castaways", () => {
   let s = opened();
-  assert.throws(() => makeReplacement(s, "z", 0, "a1", "m", T0), /Eliminated/);
-  assert.throws(() => makeReplacement(s, "z", 0, "a2", "m", T0), /Already on your team/);
-  assert.throws(() => makeReplacement(s, "z", 1, "a3", "m", T0), /nobody to replace/);
-  s = makeReplacement(s, "z", 0, "a3", "m", T0).season; // a3 now on y and z
+  assert.throws(() => makeReplacement(s, "x", 2, "a1", "m", T0), /Eliminated/);
+  assert.throws(() => makeReplacement(s, "x", 2, "a2", "m", T0), /Already on your team/);
+  s = makeReplacement(s, "x", 2, "a3", "m", T0).season; // a3 now on y and x
   assert.equal(ownerCount(s, "a3", 2), 2);
-  assert.throws(() => makeReplacement(s, "x", 0, "a3", "m", T0), /Ownership cap reached/);
+  assert.throws(() => makeReplacement(s, "z", 1, "v1", "m", T0), /This turn replaces A1/);
+  assert.throws(() => makeReplacement(s, "z", 0, "a3", "m", T0), /Ownership cap reached/);
 });
 
 test("swap credits: a paid swap needs one, a free replacement does not, and teams with none are auto-skipped", () => {
   const p = playedSeason();
   p.config.swapCreditLimit = 0;
   let s = opened(p);
-  // z only has a paid slot and no credits: skipped. x is Up Now with only its free slot usable.
-  assert.equal(win(s).turns[0].status, "AUTO_SKIPPED");
+  // Only x's free replacement (for b1's medical evacuation) can go ahead; the paid ones for a1 are skipped.
+  assert.deepEqual(win(s).turns.map((t) => t.status), ["UP_NOW", "AUTO_SKIPPED", "AUTO_SKIPPED", "AUTO_SKIPPED"]);
+  assert.match(win(s).turns[1].skipReason!, /no swap credits left/);
   assert.equal(currentTurn(win(s))!.teamId, "x");
-  assert.throws(() => makeReplacement(s, "x", 0, "a3", "m", T0), /No swap credits left/);
   s = makeReplacement(s, "x", 2, "b3", "m", T0).season;
   assert.equal(s.transactions.at(-1)!.free, true);
   assert.equal(win(s).status, "CLOSED");
@@ -280,6 +285,7 @@ test("swap credits: a paid swap needs one, a free replacement does not, and team
 
 test("every replacement replaces an eliminated castaway and scores from the next episode", () => {
   let s = opened();
+  s = makeReplacement(s, "x", 2, "b3", "m", T0).season;
   s = makeReplacement(s, "z", 0, "a3", "m", T0).season;
   for (const tx of s.transactions) {
     assert.equal(isActiveAt(s, tx.out, tx.effectiveEpisode), false);

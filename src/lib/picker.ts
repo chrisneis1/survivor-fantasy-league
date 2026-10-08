@@ -44,9 +44,10 @@ export function openingPanel(season: Season, teamId: string): { slots: PickSlot[
   return { slots, candidates: season.castaways.map((c) => candidate(season, c.id, 1, slots, (slot, id) => openingBlock(season, teamId, slot, id))) };
 }
 
-export function replacementPanel(season: Season, teamId: string, episode: number): { slots: PickSlot[]; candidates: PickCandidate[] } {
+/** The replacement picker for a team's turn; `onlySlot` limits it to the one slot the turn is for. */
+export function replacementPanel(season: Season, teamId: string, episode: number, onlySlot?: number): { slots: PickSlot[]; candidates: PickCandidate[] } {
   const roster = effectiveRoster(season, teamId, episode);
-  const slots = replaceableSlots(season, teamId, episode).map((index) => ({
+  const slots = replaceableSlots(season, teamId, episode).filter((i) => onlySlot === undefined || i === onlySlot).map((index) => ({
     index,
     name: season.slots[index].name,
     hint: `Replaces ${season.castaways.find((c) => c.id === roster[index])?.name ?? "—"}`,

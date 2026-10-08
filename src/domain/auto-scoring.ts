@@ -53,7 +53,8 @@ export function scoringBrief(season: Season, episode: number) {
     tribes: season.tribes.map((t) => ({ id: t.id, name: t.name })),
     exitTypes: statusTypes,
     howToSend: {
-      rows: "One row per castaway who scored, left the game or changed tribe: { castaway: id or name, inputs: { [rule key]: input }, exit?: { type, note? }, tribe?: id or name }.",
+      rows: "One row per castaway who scored, left the game or changed tribe: { castaway: id or name, inputs: { [rule key]: input }, exit?: { type, note?, order? }, tribe?: id or name }.",
+      exitOrder: "exit.order: when more than one castaway left in this episode, the order they left (1 = first). It sets the pick window's rounds: everyone who lost the first castaway out picks first.",
       tribe: "tribe: only when the castaway moved tribe in this episode (a swap, mutiny or merge): the tribe they're on now. It takes effect from this episode when the commissioner publishes.",
       inputs: "boolean rule: { on: true }; quantity rule: { quantity: n }; choice rule: { option: index }; manual rule: { points: n, note: required }. Any input can carry a note (a source, or what to check).",
       note: "note: one message for the commissioner — sources used, and anything the recaps didn't settle that they should check before publishing.",
@@ -85,7 +86,7 @@ export class AutoScoringError extends Error {
 }
 
 export interface AutoScoringInput {
-  rows: { castaway: string; inputs?: Record<string, RuleInput>; exit?: { type: StatusType; note?: string }; tribe?: string }[];
+  rows: { castaway: string; inputs?: Record<string, RuleInput>; exit?: { type: StatusType; note?: string; order?: number }; tribe?: string }[];
   note?: string;
 }
 
