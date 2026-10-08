@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, Field } from "@/components/action-form";
 import { AvailabilityBoard, type AvailabilityRow } from "@/components/availability-board";
+import { CopyButton } from "@/components/copy-button";
 import { IconArrowRight, IconFlame, IconPlay, IconTrendUp, IconUsers, IconWeek, IconX } from "@/components/icons";
 import { ActivityItem, QueueItem, StandingsMini, SwapLine } from "@/components/league";
 import { SeasonShell } from "@/components/shell";
@@ -123,7 +124,20 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
   const up = pw && currentTurn(pw);
   // A turn replaces one castaway (older windows: all of a team's open slots in one turn).
   const upRemaining = up ? (up.slot !== undefined ? 1 : picksRemaining(season, up.teamId, effectiveEp)) : 0;
-  const origin = admin && up ? await siteOrigin() : "";
+  const origin = up ? await siteOrigin() : "";
+  // A message for the league's group chat: the last pick, who's up, and who's next.
+  const who = (teamId: string) => `${teamOf(season, teamId).member} (${teamOf(season, teamId).name})`;
+  const next = up ? pw!.turns.find((t) => t.status === "WAITING" && t.sequence > up.sequence) : undefined;
+  const lastPick = picks.at(-1);
+  const chatText = up
+    ? [
+        `${season.name}: picks after ${episodeLabel(season, W)}`,
+        ...(lastPick ? [`Last pick: ${teamOf(season, lastPick.team).member} took ${castawayName(season, lastPick.in)} for ${castawayName(season, lastPick.out)}`] : []),
+        `Up now: ${who(up.teamId)}${up.out ? `, replacing ${castawayName(season, up.out)}` : ""}`,
+        next ? `Next up: ${who(next.teamId)}${next.out ? `, replacing ${castawayName(season, next.out)}` : ""}` : "Next up: nobody, this is the last pick",
+        `Pick here: ${origin}${seasonPath(season.id, "/my")}`,
+      ].join("\n")
+    : "";
   const mineInQueue = me ? (rows.find((r) => r.teamId === me && (r.status === "UP_NOW" || r.status === "WAITING")) ?? rows.find((r) => r.teamId === me)) : undefined;
 
   return (
@@ -197,6 +211,9 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
                 Make your picks <IconArrowRight size={16} />
               </Link>
             ) : null}
+          </div>
+          <div className="mt-3">
+            <CopyButton text={chatText} label="Copy for the group chat" />
           </div>
           {admin ? (
             <div className="mt-4 grid gap-3 border-t border-accent/25 pt-4">

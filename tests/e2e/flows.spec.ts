@@ -53,6 +53,21 @@ test("filtering the castaway directory", async ({ page }) => {
   expect(out).toBeLessThan(all);
 });
 
+test("the pick window copies who's up and who's next for the group chat", async ({ page, context }) => {
+  const errors = watchErrors(page);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/demo-active/this-week");
+  await page.getByRole("button", { name: "Copy for the group chat" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Copied" })).toBeVisible();
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain("Demo Season: picks after");
+  expect(text).toMatch(/Last pick: .+ took .+ for .+/);
+  expect(text).toMatch(/Up now: .+, replacing .+/);
+  expect(text).toMatch(/Next up: /);
+  expect(text).toContain("/demo-active/my");
+  expect(errors).toEqual([]);
+});
+
 test("a player makes a replacement pick", async ({ page }) => {
   const errors = watchErrors(page);
   await signInAsPlayer(page, "/demo-active/my");
