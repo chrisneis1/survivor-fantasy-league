@@ -36,6 +36,12 @@ const exitLabel: Record<StatusType, string> = {
   OTHER_EXIT: "Other exit",
 };
 
+/** The "Voted out" rule: ticking it also marks the castaway as voted out under Left the game, and the other way round. */
+const VOTED_OUT_RULE = "votedOut";
+
+/** A light wash of a tribe's colour over the surface, for the name column. */
+const tribeWash = (color?: string) => (color ? `color-mix(in srgb, ${color} 22%, var(--surface))` : undefined);
+
 /** Team-challenge rules everyone on a tribe scores together; the grid offers a one-tap fill per tribe for these. */
 const TRIBE_RULES = ["teamImmunity", "rewardImmunity", "reward"];
 
@@ -123,16 +129,32 @@ export function ScoringGrid({
       return { ...prev, [id]: { ...row, inputs: { ...row.inputs, [key]: { ...row.inputs[key], ...patch } } } };
     });
   };
+  // "Voted out" the rule and "Voted out" under Left the game always go together: ticking either ticks the other, and
+  // unticking either clears both (other exits — quit, medevac — are left alone).
+  const hasVotedOutRule = rules.some((r) => r.key === VOTED_OUT_RULE);
+  const setExit = (id: string, type: StatusType | undefined) => {
+    if (mode === "edit") setTouched((prev) => new Set(prev).add(cellKey(id, "exit")));
+    setRows((prev) => {
+      const row = prev[id] ?? { castaway: id, inputs: {} };
+      return { ...prev, [id]: { ...row, exit: type ? { ...row.exit, type } : undefined } };
+    });
+  };
+  const setVotedOut = (id: string, on: boolean) => {
+    setInput(id, VOTED_OUT_RULE, { on });
+    if (exitsLocked) return;
+    const exit = rowOf(id).exit?.type;
+    if (on && exit !== "VOTED_OUT") setExit(id, "VOTED_OUT");
+    if (!on && exit === "VOTED_OUT") setExit(id, undefined);
+  };
   /** Sets or clears a same-cell radio value (exit only — tribe uses setTribe, which never clears). */
   const setChoice = (id: string, key: string, current: string | undefined, value: string) => {
     setDirty(true);
     if (mode === "edit") setTouched((prev) => new Set(prev).add(cellKey(id, key)));
     const next = current === value ? undefined : value;
     if (key === "exit") {
-      setRows((prev) => {
-        const row = prev[id] ?? { castaway: id, inputs: {} };
-        return { ...prev, [id]: { ...row, exit: next ? { ...row.exit, type: next as StatusType } : undefined } };
-      });
+      setExit(id, next as StatusType | undefined);
+      const votedOutTicked = !!rowOf(id).inputs[VOTED_OUT_RULE]?.on;
+      if (hasVotedOutRule && (next === "VOTED_OUT") !== votedOutTicked) setInput(id, VOTED_OUT_RULE, { on: next === "VOTED_OUT" });
     } else {
       // Always include `option` in the patch, even when clearing: setInput merges the patch onto the
       // existing cell, so an empty `{}` patch (the old code here) left the previous option in place
@@ -267,7 +289,7 @@ export function ScoringGrid({
   const ruleInput = (c: GridCastaway, r: ScoringRule, big = false) => {
     const input = rowOf(c.id).inputs[r.key] ?? {};
     if (r.inputType === "boolean")
-      return <input type="checkbox" aria-label={`${r.name} for ${c.name}`} checked={!!input.on} onChange={(e) => setInput(c.id, r.key, { on: e.target.checked })} className={`${big ? "size-6" : "size-5"} accent-[var(--accent)]`} />;
+      return <input type="checkbox" aria-label={`${r.name} for ${c.name}`} checked={!!input.on} onChange={(e) => (r.key === VOTED_OUT_RULE ? setVotedOut(c.id, e.target.checked) : setInput(c.id, r.key, { on: e.target.checked }))} className={`${big ? "size-6" : "size-5"} accent-[var(--accent)]`} />;
     if (r.inputType === "quantity")
       return <input type="number" min={0} step={1} inputMode="numeric" aria-label={`${r.name} for ${c.name}`} value={input.quantity ?? ""} onChange={(e) => setInput(c.id, r.key, { quantity: e.target.value === "" ? undefined : Number(e.target.value) })} className={`${inputCls} ${big ? "w-20" : "w-16 px-2 py-1"}`} />;
     if (r.inputType === "choice")
@@ -436,7 +458,11 @@ export function ScoringGrid({
               const tribeId = tribeOf(c.id);
               return (
                 <tr key={c.id} className={`border-t align-top ${out ? "border-bad/30 bg-bad/[0.06]" : "border-line"}`}>
-                  <th scope="row" className={`sticky left-0 z-10 w-36 min-w-36 max-w-36 break-words px-3 py-2 text-left font-normal ${out ? "bg-bad/[0.06]" : "bg-surface"}`}>
+                  <th
+                    scope="row"
+                    className={`sticky left-0 z-10 w-36 min-w-36 max-w-36 break-words px-3 py-2 text-left font-normal ${out ? "bg-bad/[0.06]" : "bg-surface"}`}
+                    style={out ? undefined : { background: tribeWash(tribes.find((t) => t.id === tribeId)?.color), boxShadow: `inset 4px 0 0 ${tribes.find((t) => t.id === tribeId)?.color ?? "transparent"}` }}
+                  >
                     <span className={`flex items-center gap-1.5 font-semibold ${out ? "text-bad" : ""}`}>
                       <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: tribes.find((t) => t.id === tribeId)?.color ?? "#888" }} />
                       <span className={out ? "line-through decoration-bad/70" : ""}>{c.name}</span>
@@ -488,7 +514,11 @@ export function ScoringGrid({
               {mobileView === "rule" ? (
                 <ul className="overflow-hidden rounded-2xl border border-line bg-surface">
                   {g.items.map((c) => (
-                    <li key={c.id} className={`flex items-start justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0 ${mode === "edit" && rowOf(c.id).exit ? "bg-bad/[0.06]" : ""}`}>
+                    <li
+                      key={c.id}
+                      className={`flex items-start justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0 ${mode === "edit" && rowOf(c.id).exit ? "bg-bad/[0.06]" : ""}`}
+                      style={mode === "edit" && rowOf(c.id).exit ? undefined : { boxShadow: `inset 4px 0 0 ${tribes.find((t) => t.id === tribeOf(c.id))?.color ?? "transparent"}` }}
+                    >
                       <span className="min-w-0 pt-1.5">
                         <span className="block truncate font-semibold">{c.name}</span>
                         <span className={`num block text-xs font-bold ${totalCls(resolved[c.id].total)}`}>{signed(resolved[c.id].total)} total</span>
@@ -507,8 +537,11 @@ export function ScoringGrid({
                     const scored = rules.filter((r) => hasInput(row.inputs[r.key])).length;
                     return (
                       <li key={c.id}>
-                        <details className={`group rounded-2xl border ${out ? "border-bad/30 bg-bad/[0.06]" : res.errors.length ? "border-bad/50 bg-surface" : "border-line bg-surface"}`}>
-                          <summary className="flex min-h-14 cursor-pointer items-center gap-3 px-3 py-2">
+                        <details className={`group overflow-hidden rounded-2xl border ${out ? "border-bad/30 bg-bad/[0.06]" : res.errors.length ? "border-bad/50 bg-surface" : "border-line bg-surface"}`}>
+                          <summary
+                            className="flex min-h-14 cursor-pointer items-center gap-3 px-3 py-2"
+                            style={out ? undefined : { background: tribeWash(tribes.find((t) => t.id === tribeOf(c.id))?.color), boxShadow: `inset 4px 0 0 ${tribes.find((t) => t.id === tribeOf(c.id))?.color ?? "transparent"}` }}
+                          >
                             <span className="min-w-0 flex-1">
                               <span className={`block truncate font-semibold ${out ? "text-bad line-through decoration-bad/70" : ""}`}>{c.name}</span>
                               <span className="block truncate text-xs text-muted">
