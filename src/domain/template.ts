@@ -208,7 +208,11 @@ export interface EpisodeLayout {
 
 const genericTitle = /^(Episode|Week) \d+$|^Finale$/;
 
-/** Lays out the whole season's episodes in one step. Episodes that have been scored (or have progress saved) are left alone. */
+/**
+ * Lays out the whole season's episodes in one step. Published episodes are left alone; one with progress saved keeps
+ * its scoring but can still move phase (e.g. it turned out to be the merge), and saved inputs are checked again when it
+ * is published.
+ */
 export function applyEpisodeLayout(season: Season, layout: EpisodeLayout, actor: string): Result {
   if (season.status === "ARCHIVED") throw new Error("An archived season is read-only.");
   const { total, mergeAt, draftTail } = layout;
@@ -217,8 +221,9 @@ export function applyEpisodeLayout(season: Season, layout: EpisodeLayout, actor:
   if (mergeAt < 1 || mergeAt > total) throw new Error(`The merge episode must be between 1 and ${total}.`);
   if (draftTail < 0 || draftTail >= total) throw new Error("The original-draft episodes at the end must be fewer than the total.");
 
-  const locked = season.episodes.filter((e) => e.state !== "SCHEDULED");
-  if (total < locked.length) throw new Error(`${locked.length} episodes are already scored or in progress, so the season can't have fewer than that.`);
+  const started = season.episodes.filter((e) => e.state !== "SCHEDULED");
+  if (total < started.length) throw new Error(`${started.length} episodes are already scored or in progress, so the season can't have fewer than that.`);
+  const locked = season.episodes.filter((e) => e.state === "PUBLISHED");
 
   const wanted = (n: number): Pick<Episode, "phase" | "rosterPolicy"> => ({
     phase: n === total ? "finale" : n >= mergeAt ? "post-merge" : "pre-merge",
@@ -236,7 +241,8 @@ export function applyEpisodeLayout(season: Season, layout: EpisodeLayout, actor:
     const existing = next.episodes.find((e) => e.number === n);
     const w = wanted(n);
     const title = !existing || genericTitle.test(existing.title) ? (w.phase === "finale" ? "Finale" : `Episode ${n}`) : existing.title;
-    if (existing && existing.state !== "SCHEDULED") return existing;
+    if (existing?.state === "PUBLISHED") return existing;
+    if (existing?.state === "SCORING") return { ...existing, phase: w.phase, rosterPolicy: w.rosterPolicy };
     return { id: `e${n}`, number: n, title, phase: w.phase, state: "SCHEDULED" as const, rosterPolicy: w.rosterPolicy, ...(existing?.excludeFromStandings ? { excludeFromStandings: true } : {}) };
   });
   return { season: next, audit: [ev(season, actor, "season", season.id, "APPLY_EPISODE_LAYOUT", before, layout)] };

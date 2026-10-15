@@ -1,6 +1,6 @@
 // Season setup and lifecycle (guide §4, §13). Pure functions over a Season.
-import { isActiveAt, latestPublished } from "./engine";
-import type { AuditEvent, Season } from "./types";
+import { currentTribeId, isActiveAt, latestPublished } from "./engine";
+import type { AuditEvent, Season, Tribe } from "./types";
 import { findWinner, resolveWagers, type WagerEntry } from "./wager";
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -129,6 +129,35 @@ export function updateCastaway(season: Season, castawayId: string, form: { name:
   c.name = name;
   c.initialTribeId = form.tribe;
   return { season: next, audit: [{ seasonId: season.id, actor, entityType: "castaway", entityId: castawayId, action: "UPDATE", before, after: { name, tribe: form.tribe } }] };
+}
+
+/** Colours offered for a new tribe when none is given (a swap's third tribe, the merged tribe…). */
+const TRIBE_COLOURS = ["#d6453d", "#2f6fd6", "#2e9e5b", "#e07b1f", "#1fb5b0", "#c9417f", "#6b4bc9", "#8a6d3b"];
+
+/**
+ * Adds a tribe — before the season, or mid-season when a swap or the merge brings a new one. Any time until the season
+ * is archived; castaways join it from the scoring grid (their tribe for that episode). Matches existing tribes by name.
+ */
+export function addTribe(season: Season, form: { name: string; color?: string }, actor: string): { season: Season; audit: AuditEvent[]; tribe: Tribe } {
+  if (season.status === "ARCHIVED") throw new Error("An archived season is read-only.");
+  const name = form.name.trim().slice(0, 40);
+  if (!name) throw new Error("Give the tribe a name.");
+  const id = slug(name);
+  if (!id) throw new Error("Give the tribe a name with letters or numbers.");
+  if (season.tribes.some((t) => t.id === id || t.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`There's already a tribe called ${name}.`);
+  const color = form.color?.trim() || TRIBE_COLOURS.find((c) => !season.tribes.some((t) => t.color.toLowerCase() === c)) || "#888888";
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error("Colour must look like #1fb5b0.");
+  const tribe = { id, name, color };
+  const next = clone(season);
+  next.tribes.push(tribe);
+  return { season: next, tribe, audit: [{ seasonId: season.id, actor, entityType: "tribe", entityId: id, action: "ADD", after: { name, color } }] };
+}
+
+/** Tribes that have had castaways but have none now: dissolved by a swap or the merge. Hidden from the scoring grid. */
+export function dissolvedTribes(season: Season, episode: number): Set<string> {
+  const used = new Set([...season.castaways.map((c) => c.initialTribeId), ...season.tribeSwaps.filter((s) => s.episode <= episode).map((s) => s.tribeId)]);
+  const now = new Set(season.castaways.filter((c) => isActiveAt(season, c.id, episode)).map((c) => currentTribeId(season, c.id, episode)));
+  return new Set(season.tribes.filter((t) => used.has(t.id) && !now.has(t.id)).map((t) => t.id));
 }
 
 export function validTimezone(tz: string): boolean {

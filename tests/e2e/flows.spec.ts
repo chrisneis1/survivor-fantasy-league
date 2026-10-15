@@ -285,6 +285,18 @@ test("one tap fills a tribe's challenge result for everyone on it", async ({ pag
   await won.click();
   await expect(won).toHaveAttribute("aria-pressed", "false");
   for (const box of await tokaRows.all()) await expect(box).not.toBeChecked();
+
+  // A tribe swap: add the new tribe right here, and it shows up as a choice for every castaway.
+  await page.getByText("Tribe swap or merge? Add the new tribe").click();
+  await page.getByLabel("Tribe name").fill("Dina");
+  await page.getByRole("button", { name: "Add tribe" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Added tribe Dina" })).toBeVisible();
+  await page.getByRole("button", { name: "By castaway" }).click();
+  await page.locator("summary").filter({ hasText: "Kilby" }).click();
+  // Ticking it moves Kilby straight into a Dina group (the list regroups by tribe), with its own tribe buttons.
+  await page.getByRole("checkbox", { name: "Kilby is currently on Dina" }).click();
+  await expect(page.getByRole("region", { name: "Dina" }).getByText("Kilby")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Dina results" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 

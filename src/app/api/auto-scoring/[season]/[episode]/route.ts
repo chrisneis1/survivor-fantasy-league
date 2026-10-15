@@ -56,11 +56,16 @@ export async function PUT(req: Request, { params }: Params) {
     try {
       const next = saveAutoScoring(cur.season, episode, input, new Date().toISOString());
       const saved = next.drafts.find((d) => d.episode === episode)!;
+      // Tribes it added (a swap or the merge) and a phase it corrected go on the record with the save.
+      const newTribes = next.tribes.filter((t) => !cur.season.tribes.some((x) => x.id === t.id)).map((t) => t.name);
+      const phaseBefore = cur.season.episodes.find((e) => e.number === episode)?.phase;
+      const phase = next.episodes.find((e) => e.number === episode)?.phase;
       await store().save(next, cur.version, [
-        { seasonId: next.id, actor: AUTO_SCORER, entityType: "episode", entityId: String(episode), action: "AUTO_SCORING_SAVED", after: { rows: saved.rows.length } },
+        { seasonId: next.id, actor: AUTO_SCORER, entityType: "episode", entityId: String(episode), action: "AUTO_SCORING_SAVED", after: { rows: saved.rows.length, ...(newTribes.length ? { newTribes } : {}), ...(phase !== phaseBefore ? { phase } : {}) } },
       ]);
       revalidatePath("/", "layout");
-      return json(200, { ok: `Saved scoring for ${saved.rows.length} castaways as progress on episode ${episode}. The commissioner reviews and publishes it.`, rows: saved.rows.length });
+      const extras = [newTribes.length ? `added tribe${newTribes.length > 1 ? "s" : ""} ${newTribes.join(", ")}` : "", phase !== phaseBefore ? `set episode ${episode} to ${phase}` : ""].filter(Boolean);
+      return json(200, { ok: `Saved scoring for ${saved.rows.length} castaways as progress on episode ${episode}${extras.length ? ` (and ${extras.join("; ")})` : ""}. The commissioner reviews and publishes it.`, rows: saved.rows.length });
     } catch (e) {
       if (e instanceof ConflictError && attempt < 2) continue;
       if (e instanceof AutoScoringError) return json(e.status, { error: e.message, problems: e.problems });

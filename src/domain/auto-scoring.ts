@@ -3,6 +3,8 @@
 // the top of scoring a commissioner has saved.
 import { currentTribeId, isActiveAt, statusEventFor } from "./engine";
 import { cleanRows, optionPoints, resolveRow, rulesForPhase, saveDraft, statusTypes } from "./scoring";
+import { addTribe } from "./setup";
+import { applyEpisodeLayout, layoutOf } from "./template";
 import type { DraftRow, RuleInput, Season, StatusType } from "./types";
 
 /** The actor recorded on everything the auto-scorer saves. */
@@ -56,6 +58,8 @@ export function scoringBrief(season: Season, episode: number) {
       rows: "One row per castaway who scored, left the game or changed tribe: { castaway: id or name, inputs: { [rule key]: input }, exit?: { type, note?, order? }, tribe?: id or name }.",
       exitOrder: "exit.order: when more than one castaway left in this episode, the order they left (1 = first). It sets the pick window's rounds: everyone who lost the first castaway out picks first.",
       tribe: "tribe: only when the castaway moved tribe in this episode (a swap, mutiny or merge): the tribe they're on now. It takes effect from this episode when the commissioner publishes.",
+      newTribes: "newTribes: [{ name, color? }] for tribes a swap or the merge created that aren't in `tribes` yet (color as #rrggbb, e.g. the buff colour). They're added to the season first, so rows can use them as `tribe`.",
+      phase: "phase: \"pre-merge\" or \"post-merge\", only when this episode's real phase differs from the brief's (the merge came earlier or later than the site expects). Later unscored episodes follow; the finale stays the finale.",
       inputs: "boolean rule: { on: true }; quantity rule: { quantity: n }; choice rule: { option: index }; manual rule: { points: n, note: required }. Any input can carry a note (a source, or what to check).",
       note: "note: one message for the commissioner — sources used, and anything the recaps didn't settle that they should check before publishing.",
     },
@@ -88,6 +92,10 @@ export class AutoScoringError extends Error {
 export interface AutoScoringInput {
   rows: { castaway: string; inputs?: Record<string, RuleInput>; exit?: { type: StatusType; note?: string; order?: number }; tribe?: string }[];
   note?: string;
+  /** Tribes a swap or the merge created that the site doesn't have yet: added before the rows are read. */
+  newTribes?: { name: string; color?: string }[];
+  /** This episode's phase, when the merge came at a different episode than the site expects. */
+  phase?: "pre-merge" | "post-merge";
 }
 
 /**
@@ -106,6 +114,31 @@ export function saveAutoScoring(season: Season, episode: number, input: AutoScor
     throw new AutoScoringError(409, `The commissioner has already saved scoring for episode ${episode}, so auto-scoring won't replace it.`);
 
   const problems: string[] = [];
+  // New tribes from a swap or the merge, and a corrected merge episode, apply before the rows are read.
+  let working = season;
+  for (const t of Array.isArray(input?.newTribes) ? input.newTribes : []) {
+    const name = typeof t?.name === "string" ? t.name.trim() : "";
+    if (working.tribes.some((x) => x.name.trim().toLowerCase() === name.toLowerCase())) continue; // already there
+    try {
+      working = addTribe(working, { name, color: typeof t?.color === "string" ? t.color : undefined }, AUTO_SCORER).season;
+    } catch (e) {
+      problems.push(`New tribe "${name}": ${(e as Error).message}`);
+    }
+  }
+  if (input?.phase !== undefined && input.phase !== ep.phase) {
+    if (input.phase !== "pre-merge" && input.phase !== "post-merge") problems.push(`Unknown phase "${String(input.phase)}".`);
+    else if (ep.phase === "finale") problems.push("The finale's phase can't be changed.");
+    else {
+      const layout = layoutOf(working);
+      const mergeAt = input.phase === "post-merge" ? episode : Math.min(Math.max(layout.mergeAt, episode + 1), layout.total);
+      try {
+        working = applyEpisodeLayout(working, { ...layout, mergeAt }, AUTO_SCORER).season;
+      } catch (e) {
+        problems.push(`Phase: ${(e as Error).message}`);
+      }
+    }
+  }
+  const phase = working.episodes.find((e) => e.number === episode)!.phase;
   const byName = new Map(season.castaways.map((c) => [c.name.trim().toLowerCase(), c.id]));
   const ids = new Set(season.castaways.map((c) => c.id));
   const rows: DraftRow[] = [];
@@ -116,25 +149,25 @@ export function saveAutoScoring(season: Season, episode: number, input: AutoScor
       problems.push(`Unknown castaway "${given}".`);
       continue;
     }
-    for (const key of Object.keys(raw.inputs ?? {})) if (!season.rules.some((r) => r.key === key)) problems.push(`${given}: unknown rule "${key}".`);
+    for (const key of Object.keys(raw.inputs ?? {})) if (!working.rules.some((r) => r.key === key)) problems.push(`${given}: unknown rule "${key}".`);
     if (raw.exit && !statusTypes.includes(raw.exit.type)) problems.push(`${given}: unknown exit type "${raw.exit.type}".`);
     // A tribe move, by tribe id or name.
     const tribeGiven = typeof raw.tribe === "string" ? raw.tribe.trim().toLowerCase() : "";
-    const tribe = tribeGiven ? season.tribes.find((t) => t.id === tribeGiven || t.name.trim().toLowerCase() === tribeGiven)?.id : undefined;
+    const tribe = tribeGiven ? working.tribes.find((t) => t.id === tribeGiven || t.name.trim().toLowerCase() === tribeGiven)?.id : undefined;
     if (tribeGiven && !tribe) problems.push(`${given}: unknown tribe "${raw.tribe}".`);
     rows.push({ castaway: id, inputs: raw.inputs ?? {}, ...(raw.exit ? { exit: raw.exit } : {}), ...(tribe ? { tribe } : {}) });
   }
-  const clean = cleanRows(season, rows);
+  const clean = cleanRows(working, rows);
   const seen = new Set<string>();
   for (const row of clean) {
     const name = season.castaways.find((c) => c.id === row.castaway)!.name;
     if (seen.has(row.castaway)) problems.push(`${name} appears more than once.`);
     seen.add(row.castaway);
     if (!isActiveAt(season, row.castaway, episode)) problems.push(`${name} already left the game before episode ${episode}.`);
-    problems.push(...resolveRow(season, ep.phase, row).errors.map((m) => `${name}: ${m}`));
+    problems.push(...resolveRow(working, phase, row).errors.map((m) => `${name}: ${m}`));
   }
   if (problems.length) throw new AutoScoringError(422, "The scoring has problems; nothing was saved.", problems);
 
   const note = typeof input?.note === "string" && input.note.trim() ? input.note.trim().slice(0, 4000) : undefined;
-  return saveDraft(season, { episode, rows: clean, savedBy: AUTO_SCORER, ...(note ? { note } : {}) }, at);
+  return saveDraft(working, { episode, rows: clean, savedBy: AUTO_SCORER, ...(note ? { note } : {}) }, at);
 }

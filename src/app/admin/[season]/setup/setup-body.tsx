@@ -226,9 +226,10 @@ export async function SetupBody({ season }: { season: Season }) {
                   </li>
                 ))}
               </ul>
-              {editable ? (
+              {season.status !== "ARCHIVED" ? (
                 <ActionForm action={addTribeAction} submit="Add tribe" ghost resetOnSuccess>
                   <Hidden season={season} />
+                  {!editable ? <p className="text-sm text-muted">A tribe swap or the merge brought a new tribe? Add it here (or on the episode&apos;s scoring page), then tick it for each castaway on it.</p> : null}
                   <div className="grid grid-cols-[1fr_5rem] gap-3">
                     <Field label="Tribe name"><input name="name" required className={inputCls} /></Field>
                     <Field label="Colour"><input name="color" type="color" defaultValue="#1fb5b0" className={`${inputCls} h-[38px] p-1`} /></Field>
