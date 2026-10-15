@@ -286,6 +286,16 @@ test("one tap fills a tribe's challenge result for everyone on it", async ({ pag
   await expect(won).toHaveAttribute("aria-pressed", "false");
   for (const box of await tokaRows.all()) await expect(box).not.toBeChecked();
 
+  // Ticking "Voted out" also marks them voted out under Left the game, and unticking the exit clears both.
+  await page.getByLabel("Rule", { exact: true }).selectOption("votedOut");
+  await page.getByRole("checkbox", { name: "Voted out for Ana" }).check();
+  await page.getByLabel("Rule", { exact: true }).selectOption("exit");
+  const anaOut = page.getByRole("checkbox", { name: "Ana: Voted out" });
+  await expect(anaOut).toBeChecked();
+  await anaOut.uncheck();
+  await page.getByLabel("Rule", { exact: true }).selectOption("votedOut");
+  await expect(page.getByRole("checkbox", { name: "Voted out for Ana" })).not.toBeChecked();
+
   // A tribe swap: add the new tribe right here, and it shows up as a choice for every castaway.
   await page.getByText("Tribe swap or merge? Add the new tribe").click();
   await page.getByLabel("Tribe name").fill("Dina");
