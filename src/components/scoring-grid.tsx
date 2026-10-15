@@ -11,6 +11,8 @@ export interface GridTribe {
   id: string;
   name: string;
   color: string;
+  /** Nobody's on it any more (a swap or the merge emptied it): hidden unless a row is still set to it. */
+  dissolved?: boolean;
 }
 export interface GridCastaway {
   id: string;
@@ -109,6 +111,8 @@ export function ScoringGrid({
 
   const rowOf = (id: string): DraftRow => rows[id] ?? { castaway: id, inputs: {} };
   const tribeOf = (id: string) => rowOf(id).tribe ?? castaways.find((c) => c.id === id)?.tribeId;
+  // Tribes to offer: everything except ones a swap or the merge emptied (unless a row is still on one).
+  const shownTribes = tribes.filter((t) => !t.dissolved || castaways.some((c) => tribeOf(c.id) === t.id));
   const resolved = useMemo(() => Object.fromEntries(castaways.map((c) => [c.id, resolveRow({ rules }, phase, rowOf(c.id))])), [rows, castaways, rules, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setInput = (id: string, key: string, patch: RuleInput) => {
@@ -243,7 +247,7 @@ export function ScoringGrid({
   // ---- the controls for one cell, shared by the desktop table and the phone layouts (same state, same labels) ----
   const tribeBoxes = (c: GridCastaway, big = false) => (
     <div className={`flex flex-wrap ${big ? "gap-x-4" : "my-1 gap-x-2 gap-y-0.5"}`}>
-      {tribes.map((t) => (
+      {shownTribes.map((t) => (
         <CheckOption
           key={t.id}
           big={big}
@@ -377,7 +381,7 @@ export function ScoringGrid({
           <h3 className="eyebrow mb-1 text-muted">Tribe results</h3>
           <p className="mb-2 text-xs text-muted">Fills a result in for everyone on the tribe right now. Press it again to clear it.</p>
           <div className="grid gap-2">
-            {tribes.map((t) => {
+            {shownTribes.map((t) => {
               const members = tribeMembers(t.id);
               if (!members.length) return null;
               return (

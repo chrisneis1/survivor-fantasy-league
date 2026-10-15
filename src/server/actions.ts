@@ -7,7 +7,7 @@ import { bundledSeasons } from "@/data/archive";
 import { castPresets } from "@/data/casts";
 import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, overrideRoster, resetOpeningSelection } from "@/domain/picks";
 import { cleanRows, correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
-import { createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
+import { addTribe, createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
 import { addRule, applyCast, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
 import type { AuditEvent, DraftRow, InputType, Phase, RosterPolicy, RuleInput, Season, StatusType } from "@/domain/types";
 import { lockWagers, openWagers, wagerProblem } from "@/domain/wager";
@@ -245,15 +245,9 @@ export async function loadCastAction(_: ActionState, fd: FormData) {
 
 export async function addTribeAction(_: ActionState, fd: FormData) {
   return mutate(str(fd, "seasonId"), (s, _at, ctx) => {
-    needSetup(s);
-    const name = str(fd, "name");
-    const color = str(fd, "color") || "#888888";
-    if (!name) throw new Error("Give the tribe a name.");
-    if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error("Colour must look like #1fb5b0.");
-    const id = slug(name);
-    if (s.tribes.some((t) => t.id === id)) throw new Error("That tribe already exists.");
-    s.tribes.push({ id, name, color });
-    return { season: s, audit: [change(s, ctx.actor, "tribe", id, "ADD", undefined, { name, color })], message: `Added tribe ${name}.` };
+    const r = addTribe(s, { name: str(fd, "name"), color: str(fd, "color") || undefined }, ctx.actor);
+    const how = s.status === "SETUP" ? "" : " Tick it for each castaway who's on it now in the episode's scoring.";
+    return { season: r.season, audit: r.audit, message: `Added tribe ${r.tribe.name}.${how}` };
   });
 }
 
