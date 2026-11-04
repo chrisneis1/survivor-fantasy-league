@@ -33,6 +33,8 @@ interface QueueRow {
   tie?: string;
   /** The castaway this turn replaces. */
   out?: string;
+  /** Moved to the back of the line by the commissioner for taking too long. */
+  bumped?: boolean;
 }
 
 /** Availability rows for the board: league-wide capacity from the engine, plus where each castaway is now. */
@@ -97,7 +99,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
   const climber = [...snapshot].filter((r) => (r.movement ?? 0) > 0).sort((a, b) => (b.movement ?? 0) - (a.movement ?? 0))[0];
 
   const rows: QueueRow[] = pw
-    ? pw.turns.map((t) => ({ sequence: t.sequence, teamId: t.teamId, pointsAtOpen: t.pointsAtOpen, rankAtOpen: t.rankAtOpen, openSlots: t.openSlots, status: t.status, note: t.skipReason, tie: t.tieDrawn ? "tie, order drawn at random" : undefined, out: t.out }))
+    ? pw.turns.map((t) => ({ sequence: t.sequence, teamId: t.teamId, pointsAtOpen: t.pointsAtOpen, rankAtOpen: t.rankAtOpen, openSlots: t.openSlots, status: t.status, note: t.skipReason, tie: t.tieDrawn ? "tie, order drawn at random" : undefined, out: t.out, bumped: !!t.bumped }))
     : buildPickQueue(season, W).map((e) => ({
         sequence: e.sequence,
         teamId: e.teamId,
@@ -217,7 +219,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
                 </a>
                 <span className="text-xs text-muted">Optional. Opens your email app with the message written.</span>
               </div>
-              <ActionForm action={skipTurnAction} submit="Skip this team" ghost confirm={`Skip ${teamOf(season, up.teamId).member}'s turn? They lose the rest of this window.`}>
+              <ActionForm action={skipTurnAction} submit="Move to the back of the line" ghost confirm={`Taking too long? Move ${teamOf(season, up.teamId).member} to the back of the line? They keep their turn and pick after everyone else; the next team is up now.`}>
                 <input type="hidden" name="seasonId" value={season.id} />
                 <Field label="Reason (optional)"><input name="reason" className={`${inputCls} max-w-md`} /></Field>
               </ActionForm>
@@ -248,7 +250,7 @@ export default async function ThisWeek({ params, searchParams }: { params: Promi
                   label={archivedView && e.status === "PASSED" ? "No pick recorded" : undefined}
                   team={t.name}
                   member={t.member}
-                  meta={<>{e.out ? <>Replacing {castawayName(season, e.out)} · </> : null}<span className="num">{e.pointsAtOpen}</span> pts · rank <span className="num">{e.rankAtOpen}</span>{e.tie ? ` · ${e.tie}` : ""}</>}
+                  meta={<>{e.out ? <>Replacing {castawayName(season, e.out)} · </> : null}<span className="num">{e.pointsAtOpen}</span> pts · rank <span className="num">{e.rankAtOpen}</span>{e.tie ? ` · ${e.tie}` : ""}{e.bumped ? " · moved to the back" : ""}</>}
                   mine={e.teamId === me}
                 >
                   {mine.length ? (

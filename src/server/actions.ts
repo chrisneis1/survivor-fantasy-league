@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { bundledSeasons } from "@/data/archive";
 import { castPresets } from "@/data/casts";
-import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, overrideRoster, resetOpeningSelection } from "@/domain/picks";
+import { closePickWindow, currentTurn, endTurn, makeOpeningPick, makeReplacement, openOpeningSelection, openPickWindow, openWindow, openingTurn, overrideRoster, resetOpeningSelection, sendTurnToBack } from "@/domain/picks";
 import { cleanRows, correctEpisode, correctScore, publishEpisode, saveDraft, statusTypes } from "@/domain/scoring";
 import { addTribe, createSeason, finalizeSeason, renameTeam, slug, updateCastaway, validTimezone } from "@/domain/setup";
 import { addRule, applyCast, applyEpisodeLayout, applyRosterLayout, applyTemplate, parseOptions, removeRule, setRuleRetired, templateFrom, updateRule, type RuleForm } from "@/domain/template";
@@ -570,8 +570,10 @@ export async function skipTurnAction(_: ActionState, fd: FormData) {
     const w = openWindow(s);
     const turn = w && currentTurn(w);
     if (!turn) throw new Error("Nobody is up right now.");
-    const r = endTurn(s, turn.teamId, ctx.actor, at, { skipped: true, reason: str(fd, "reason") || undefined });
-    return { ...r, message: "Turn skipped. The next team is up." };
+    // Taking too long doesn't cost the turn: it goes to the back of the line.
+    const r = sendTurnToBack(s, ctx.actor, at, str(fd, "reason") || undefined);
+    const member = s.teams.find((t) => t.id === turn.teamId)?.member ?? "They";
+    return { ...r, message: `${member} moved to the back of the line. The next team is up.` };
   });
 }
 

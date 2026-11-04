@@ -18,6 +18,7 @@ import {
   openingTurn,
   openWindow,
   picksRemaining,
+  sendTurnToBack,
   windowBlock,
 } from "../src/domain/picks";
 import { publishEpisode, saveDraft } from "../src/domain/scoring";
@@ -292,4 +293,31 @@ test("every replacement replaces an eliminated castaway and scores from the next
     assert.equal(tx.effectiveEpisode, tx.windowAfterEpisode + 1);
   }
   assert.equal(hasLegalPick(s, "z", 2), false);
+});
+
+test("the commissioner can move a team that's taking too long to the back of the line; it keeps its turn", () => {
+  let s = opened(); // x (for b1), z (for a1), x (for a1), y (nothing to replace)
+  assert.equal(currentTurn(win(s))!.teamId, "x");
+  const r = sendTurnToBack(s, "commissioner", T0, "Asleep");
+  s = r.season;
+  assert.deepEqual(win(s).turns.map((t) => [t.teamId, t.out ?? null, t.status]), [
+    ["z", "a1", "UP_NOW"],
+    ["x", "a1", "WAITING"],
+    ["y", null, "AUTO_SKIPPED"],
+    ["x", "b1", "WAITING"],
+  ]);
+  assert.deepEqual(win(s).turns.map((t) => t.sequence), [1, 2, 3, 4], "positions are renumbered");
+  assert.equal(win(s).turns[3].bumped, 1);
+  assert.equal(r.audit[0].action, "SEND_TO_BACK");
+  assert.equal(r.audit[0].reason, "Asleep");
+
+  // It still gets to pick once everyone ahead of it has.
+  s = makeReplacement(s, "z", 0, "a3", "m", T0).season;
+  s = makeReplacement(s, "x", 0, "v3", "m", T0).season;
+  assert.equal(currentTurn(win(s))!.teamId, "x");
+  assert.equal(currentTurn(win(s))!.out, "b1");
+  // Last one waiting: there's nobody to move it behind.
+  assert.throws(() => sendTurnToBack(s, "commissioner", T0), /Nobody else is waiting/);
+  s = makeReplacement(s, "x", 2, "b3", "m", T0).season;
+  assert.equal(win(s).status, "CLOSED");
 });

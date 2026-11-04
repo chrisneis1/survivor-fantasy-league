@@ -352,6 +352,8 @@ export interface PickTurn {
   eligible: boolean;
   /** Tied on points with another team in its group, and placed by the random draw made when the window opened. */
   tieDrawn?: boolean;
+  /** How many times the commissioner moved this turn to the back of the line for taking too long. */
+  bumped?: number;
   status: QueueStatus;
   picks: number;
   startedAt?: string;
