@@ -447,6 +447,30 @@ export function endTurn(season: Season, teamId: string, actor: string, at: strin
   return { season: advance(next, at), audit: [ev(season, actor, "pick_window", window.id, opts.skipped ? "SKIP_TURN" : "END_TURN", { team: teamId, picks: turn.picks }, opts.reason)] };
 }
 
+/**
+ * The commissioner moves the team that's up (taking too long) to the back of the line: the turn isn't lost, it waits
+ * behind everyone still to pick, and the next team is up. Not possible when nobody else is waiting.
+ */
+export function sendTurnToBack(season: Season, actor: string, at: string, reason?: string): Result {
+  const w0 = openWindow(season);
+  const up0 = w0 && currentTurn(w0);
+  if (!w0 || !up0) throw new Error("Nobody is up right now.");
+  if (!w0.turns.some((t) => t.status === "WAITING")) throw new Error(`Nobody else is waiting, so this team would just be up again. Let them finish, or close the window.`);
+  const next = clone(season);
+  const w = openWindow(next)!;
+  const i = w.turns.findIndex((t) => t.status === "UP_NOW");
+  const [turn] = w.turns.splice(i, 1);
+  turn.status = "WAITING";
+  delete turn.startedAt;
+  turn.bumped = (turn.bumped ?? 0) + 1;
+  w.turns.push(turn);
+  w.turns.forEach((t, n) => (t.sequence = n + 1));
+  return {
+    season: advance(next, at),
+    audit: [ev(season, actor, "pick_window", w.id, "SEND_TO_BACK", { team: turn.teamId, ...(turn.out ? { replacing: turn.out } : {}), position: turn.sequence }, reason)],
+  };
+}
+
 /** The commissioner ends the window. Teams that have not acted are marked as passed. */
 export function closePickWindow(season: Season, actor: string, at: string, reason?: string): Result {
   const w0 = openWindow(season);
